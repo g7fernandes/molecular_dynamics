@@ -1,0 +1,2360 @@
+
+module mod0
+    use mod1
+    use linkedlist
+        type :: container
+            type(list_t), pointer :: list => null()
+        end type container
+
+        ! Propriedades de cada grupo de partícula (indicado pelo índice do vetor com este tipo)
+        ! nos permite mais fases e economiza espaço
+        type :: prop_grupo
+            real(dp) :: m ! mass
+            real(dp) :: epsilon 
+            real(dp) :: sigma 
+            real(dp)  :: x_lockdelay    ! só vai poder mudar de posição a partir de t = x_lockdelay
+        end type prop_grupo
+
+            ! LSTR  lista de transferência pro MPI
+        type :: lstr
+            real(dp),allocatable :: lstrdb_N(:)
+            real(dp),allocatable :: lstrdb_S(:)
+            real(dp),allocatable :: lstrdb_E(:)
+            real(dp),allocatable :: lstrdb_W(:)
+            real(dp),allocatable :: lstrdb_D(:) ! Diagonal. Para transferir nas direções NE, NS, SE, SW no encontro de 4 processos
+
+            integer,allocatable :: lstrint_N(:)
+            integer,allocatable :: lstrint_S(:)
+            integer,allocatable :: lstrint_E(:)
+            integer,allocatable :: lstrint_W(:)
+            integer,allocatable :: lstrint_D(:)
+        end type lstr
+
+
+end module mod0
+
+module mod2
+    !use mod0
+    !use data
+    contains
+    
+    !Calcula velocidades distribuidas de acordo com MaxwellBolzmann
+    ! factor = sqrt(<vd²>) = sqrt(kb*T/m) por componente
+    subroutine MaxwellBoltzmann(malha,mesh,factor)
+        use linkedlist
+        use mod1
+        use randnormal
+        use mod0
+        use data
+        
+        real(dp),intent(in) :: factor(2)
+        integer :: i,j
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer, intent(in) :: mesh(2)
+        type(list_t), pointer :: node
+        type(data_ptr) :: ptr
+
+        do i = 2,mesh(2)+1
+            do j = 2,mesh(1)+1
+               ! print *, 'posição', i, ',', j
+                node => list_next(malha(i,j)%list)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    ptr%p%v(1) = ptr%p%v(1) + factor(1)*GaussDeviate()
+                    ptr%p%v(2) = ptr%p%v(2) + factor(2)*GaussDeviate()
+                    ptr%p%F = [0,0]
+                    node => list_next(node)
+                end do
+            end do
+        end do
+
+    end subroutine MaxwellBoltzmann
+    
+    !computa o potencial total 
+    function comp_pot(mesh,malha,propriedade,r_cut) result(V)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        type(data_ptr) :: ptr, ptrn
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        real(dp) ::  rcut,r_cut
+        integer :: i,j
+        integer, intent(in) :: mesh(:)
+        real(dp) :: r, aux2(2),V, x1(2),x2(2),sigma, epsil
+        type(list_t), pointer :: node, next_node
+        V = 0
+        do i = 1,mesh(1)+2
+            do j = 1,mesh(2)+2
+!                  ! !print*, 'Linha 67',i,j
+                ! dentro da malha(i,j)
+                node => list_next(malha(i,j)%list)
+!                 print*,'B',i,j
+!                 print*,associated(node),i,j
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr) !particula selecionada
+                    x1 = ptr%p%x
+!                     ! !print*, 'L73'
+!                     !read(*,*)
+                    !calcular a força desta com todas as outras partículas
+                    next_node => list_next(node) ! próxima partícula da célula
+!                     ! !print*, 'L77',ptr
+                    node => list_next(node) ! a ser computado com a particula selecionada
+                    do while (associated(node))
+                        ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                        x2 = ptrn%p%x
+                        sigma = propriedade(ptr%p%grupo)%sigma
+                        epsil = propriedade(ptr%p%grupo)%epsilon 
+                        rcut = sigma*r_cut
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                        if (r <= rcut) then
+                            V = abs((sigma/r)**6*((sigma/r)**6-1)) + V
+                        end if
+                        node => list_next(node) ! próxima partícula da célula
+                    end do
+
+                    !Células ao redor 
+                    if (i /= mesh(1)+2) then
+                        if (j == mesh(2)+2) then
+                            node => list_next(malha(i+1,1)%list)
+                        else
+                            node => list_next(malha(i,j+1)%list)
+                        end if
+
+                        do while (associated(node))
+
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            x2 = ptrn%p%x
+                            ! ! !print*, 'L120'
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            ! sigma = propriedade(ptr%p%grupo)%sigma
+                            ! epsilon = propriedade(ptr%p%grupo)%epsilon 
+                            ! rcut = sigma*rcut                            
+                            if (r <= rcut) then
+                                V = abs((sigma/r)**6*((sigma/r)**6-1)) + V
+                            end if
+                            node => list_next(node) ! próxima partícula da célula
+                            
+                        end do
+                        
+                    end if
+                    
+                end do
+            !    print*,'linha137'
+            end do
+!              print*,'L143 LJ'
+        end do
+        
+        V = V*4*epsil        
+        
+    end function comp_pot    
+ 
+    function comp_K(malha,domx,domy,propriedade,np,id,t) result(K)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        use mpi
+
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        integer, intent(in) :: domx(2),domy(2)
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(data_ptr) :: ptr
+        real(dp) :: kb = 1.38064852E-23,K, auxres(8), nump = 0, aux(2)
+        type(list_t), pointer :: node
+        integer ( kind = 4 ) :: np, ierr, id
+        real(dp), intent(in) :: t
+        
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+               ! print *, 'posição', i, ',', j
+                node => list_next(malha(i,j)%list)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    !calcula a energia cinética atual
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        K = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + K
+                        nump = nump +1
+                    end if
+                    node => list_next(node)
+                end do
+            end do
+        end do        
+        
+        ! então o processo é paralelo, vamos juntar tudo 
+        aux = [K, nump]
+        if (np > 1) then
+            call MPI_GATHER(aux2, 2, MPI_DOUBLE_PRECISION, Kres, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+            if (id == 0) then
+                K = auxres(1)+auxres(3)+auxres(5)+auxres(7)
+                nump = auxres(2)+auxres(4)+auxres(6)+auxres(8)
+                auxres = [K,nump,K,nump,K,nump,K,nump]
+            end if
+            call MPI_SCATTER(auxres, 2, MPI_DOUBLE_PRECISION, aux, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        end if
+        K = aux(1)/aux(2)
+   
+    end function comp_K 
+        
+    !Corrige energia cinética/configura temepratura
+    subroutine corr_K(malha,domx,domy,N,Td,propriedade, np,id,tt)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+ 
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        real(dp),intent(in) :: Td!energia cinética
+        real(dp) :: T,K,kb = 1.38064852E-23
+        integer, intent(in) :: N,domx(2),domy(2)
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(data_ptr) :: ptr
+        type(list_t), pointer :: node
+        integer ( kind = 4 ) :: np, id
+        real(dp), intent(in) :: tt
+        !calcula temperatura atual
+        T = (2/(3*kb))*comp_K(malha,domx,domy,propriedade,np,id,tt)
+        T = sqrt(Td/T) ! aqui o T é o Beta
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+               ! print *, 'posição', i, ',', j
+                node => list_next(malha(i,j)%list)
+                !  print*, i,j
+                !  print*, 'is associated?', associated(node)
+                !  print*, associated(node)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        !calcula a energia cinética atual
+                        ptr%p%v = T*ptr%p%v ! aqui o T é o beta 
+                    end if
+                    node => list_next(node)
+                end do
+            end do
+        end do        
+    end subroutine corr_K
+    
+    !força de ficção 
+    function comp_fric(r,v,fric_term) result(f)
+        use mod1
+        real(dp), intent(in) :: r(2),v(2),fric_term
+        real(dp) :: f(2)
+        
+        f = (fric_term/(r(1)**2 + r(2)**2))*(v(1)*r(1)+v(2)*r(2))*[r(1),r(2)]
+    end function comp_fric
+        
+    
+    ! atualiza forças
+    subroutine comp_F(GField, mesh,malha,propriedade,r_cut,fric_term,domx,domy, ids, id, t)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        real(dp), intent(in) :: GField(2), t
+        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
+        real(dp) :: x1(2),v1(2),x2(2),v2(2)
+        integer :: i,j,ct = 0 !,ptr, ptrn
+        integer, intent(in) :: mesh(:),domx(2),domy(2)
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2)
+        type(list_t), pointer :: node, next_node
+        type(data_ptr) :: ptr,ptrn
+        integer ( kind = 4 ), intent(in) :: ids(8)
+        
+        
+        !Lennard Jones
+        fR = [0,0]
+        do i = domy(1),domy(2) ! i é linha
+            do j = domx(1),domx(2)
+                node => list_next(malha(i,j)%list)
+                if (associated(node)) then
+                    ptr = transfer(list_get(node), ptr)
+                    ! print*, "L 253", ptr%p%n
+                end if
+                do while (associated(node))
+                    ! print*, "Encontrada", ct, "celulas, id=", id
+                    ptr = transfer(list_get(node), ptr) !particula selecionada
+                    ptr%p%flag = .true. ! indica ao comp_x que a partícula precisa ser calculada
+                    x1 = ptr%p%x
+                    v1 = ptr%p%v
+                    m1 = propriedade(ptr%p%grupo)%m
+                    sigma_a = propriedade(ptr%p%grupo)%sigma
+                    ! rcut = r_cut*sigma
+                    epsil_a = propriedade(ptr%p%grupo)%epsilon 
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        ptr%p%F = ptr%p%F + GField*m1
+                    end if
+                    ! print '("x1  =", f10.6, " ", f10.6, " n ", i2, " cell ",i2," ",i2)',x1(1),x1(2), ptr%p%n,i,j
+                    ! if (id == 0) read(*,*)
+                    !calcular a força desta com todas as outras partículas
+                    next_node => list_next(node) ! próxima partícula da célula
+                    node => list_next(node) ! a ser computado com a particula selecionada
+             
+                    ! NA PRÓPRIA CELULA 
+                    do while (associated(node))
+                        ! print*, "x2", x2 
+                        ! print*, "ID", id
+                        ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                        sigma_b = propriedade(ptrn%p%grupo)%sigma
+                        epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                        ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                        if (sigma_a > sigma_b) then
+                            rcut = r_cut*sigma_a
+                            sigma = 0.5*(sigma_a + sigma_b)
+                            epsil = sqrt(epsil_a *epsil_b )
+                        else if (sigma_a < sigma_b) then 
+                            rcut = r_cut*sigma_b
+                            sigma = 0.5*(sigma_a + sigma_b)
+                            epsil = sqrt(epsil_a *epsil_b )
+                        else 
+                            rcut = r_cut*sigma_a
+                            sigma = sigma_a
+                            epsil = epsil_a
+                        end if 
+                        x2 = ptrn%p%x
+                        v2 = ptrn%p%v
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                        ! print '("r ", f10.5, " rcut", f10.5)',r,rcut
+                        if (r <= rcut) then
+                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]  
+                            if (fric_term > 0) then
+                                fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                            end if
+                            ptr%p%F = aux2 + ptr%p%F +fR
+                            ptrn%p%F = -aux2 + ptrn%p%F - fR
+                         end if
+                        node => list_next(node) ! próxima partícula da célula
+                    end do
+
+                    !! PARA CASO PARALELO, INTERAGIR COM AS CELULAS AO NORTE E A OESTE
+                    !
+                    ! SUL
+                    if (ids(2) > -1 .and. i == domy(1)) then
+                        node => list_next(malha(i-1,j)%list) !interagirá com a anterior linha apenas
+                        do while (associated(node))
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            sigma_b = propriedade(ptrn%p%grupo)%sigma
+                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                            if (sigma_a > sigma_b) then
+                                rcut = r_cut*sigma_a
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else if (sigma_a < sigma_b) then 
+                                rcut = r_cut*sigma_b
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else 
+                                rcut = r_cut*sigma_a
+                                sigma = sigma_a
+                                epsil = epsil_a
+                            end if 
+
+                            x2 = ptrn%p%x
+                            v2 = ptrn%p%v
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            if (r <= rcut) then
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                if (fric_term > 0) then
+                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                end if
+                                ptr%p%F = aux2 + ptr%p%F +fR
+                                ! ptrn%p%F  = -aux2 + ptrn%p%F - fR
+                            end if
+                            node => list_next(node) ! próxima partícula da célula
+                        end do
+                        
+                        if (j /= 1) then !se não for a primeira coluna 
+                            node => list_next(malha(i-1,j-1)%list) !interagá com a linha e coluna anterior
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v                                
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula
+                            end do                            
+                        end if
+
+                        if (j /= mesh(1)+2) then !se não for a última coluna 
+                            node => list_next(malha(i-1,j+1)%list) !interagá com a linha e coluna anterior
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio                            
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula
+                            end do                            
+                        end if
+                    end if 
+
+                    ! OESTE
+                    if (ids(4) > -1 .and. j == domx(1)) then 
+                        node => list_next(malha(i,j-1)%list) !interagirá com a anterior linha apenas
+                        do while (associated(node))
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            sigma_b = propriedade(ptrn%p%grupo)%sigma
+                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                            if (sigma_a > sigma_b) then
+                                rcut = r_cut*sigma_a
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else if (sigma_a < sigma_b) then 
+                                rcut = r_cut*sigma_b
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil  = sqrt(epsil_a*epsil_b)
+                            else 
+                                rcut = r_cut*sigma_a
+                                sigma = sigma_a
+                                epsil = epsil_a
+                            end if 
+
+                            x2 = ptrn%p%x
+                            v2 = ptrn%p%v                            
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            if (r <= rcut) then
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                if (fric_term > 0) then
+                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                end if
+                                ptr%p%F = aux2 + ptr%p%F +fR
+                                ! ptrn%p%F = -aux2 + ptrn%p%F - fR
+                            end if
+                            node => list_next(node) ! próxima partícula da célula
+                        end do
+                        
+                        if (i /= mesh(2)+2) then !se não for a primeira linha 
+                            node => list_next(malha(i+1,j-1)%list) !interagá com a linha e coluna anterior
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v                                
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula
+                            end do                            
+                        end if
+                    end if                     
+                    !! fim do caso para paralelismo
+
+                    !Células ao redor  !i é linha, j é coluna
+                    if (i /= mesh(2)+2) then ! se não for a última linha
+                        if (j == mesh(1)+2) then ! se for a última coluna
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha apenas
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula
+                            end do
+                            
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                    if (sigma_a > sigma_b) then
+                                        rcut = r_cut*sigma_a
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else if (sigma_a < sigma_b) then 
+                                        rcut = r_cut*sigma_b
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else 
+                                        rcut = r_cut*sigma_a
+                                        sigma = sigma_a
+                                        epsil = epsil_a
+                                    end if 
+
+                                    x2 = ptrn%p%x
+                                    v2 = ptrn%p%v
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                    if (r <= rcut) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula
+                                end do                            
+                            end if
+                        else
+                             !interagirá com a próxima linha e coluna, e na diagonal
+                            node => list_next(malha(i,j+1)%list) 
+                            
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v
+                                
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha 
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+                            
+                            node => list_next(malha(i+1,j+1)%list) !interagirá com a próxima linha e coluna
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                v2 = ptrn%p%v
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+                            
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                    if (sigma_a > sigma_b) then
+                                        rcut = r_cut*sigma_a
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else if (sigma_a < sigma_b) then 
+                                        rcut = r_cut*sigma_b
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else 
+                                        rcut = r_cut*sigma_a
+                                        sigma = sigma_a
+                                        epsil = epsil_a
+                                    end if 
+
+                                    x2 = ptrn%p%x
+                                    v2 = ptrn%p%v
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                    if (r <= rcut) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], &
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula
+                                end do                            
+                            end if
+                        end if
+                        
+                    else ! se for a última lina, só interage com a celua ao lado 
+                        node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
+                        do while (associated(node))
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            sigma_b = propriedade(ptrn%p%grupo)%sigma
+                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                            if (sigma_a > sigma_b) then
+                                rcut = r_cut*sigma_a
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else if (sigma_a < sigma_b) then 
+                                rcut = r_cut*sigma_b
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else 
+                                rcut = r_cut*sigma_a
+                                sigma = sigma_a
+                                epsil = epsil__a
+                            end if 
+
+                            x2 = ptrn%p%x
+                            v2 = ptrn%p%v
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            if (r <= rcut) then
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                if (fric_term > 0) then
+                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                end if
+                                ptr%p%F = aux2 + ptr%p%F +fR
+                                ptrn%p%F = -aux2 + ptrn%p%F - fR
+                            end if
+                            node => list_next(node) ! próxima partícula da célula                                
+                        end do
+                    end if
+                    ! ! ! print*, "L F431", ptr%p%F, id,i,j
+                    node => next_node
+                end do
+            !    print*,'linha137'
+            end do
+            !  print*,'L143 LJ'
+        end do
+        ! print*, "x_1_LJ", x1
+         !print*, 'Linha 143'
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+    end subroutine comp_F
+    
+    ! atualiza posições
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,id, np)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        use mpi
+        use matprint
+
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD
+        integer, intent(in) :: N,mesh(2),domx(2),domy(2)
+        type(list_t), pointer :: node, previous_node
+        real(dp), intent(in) :: dt, t
+        type(data_ptr) :: ptr
+        real(dp) :: x(2),m
+        real(dp), intent(in) :: icell(:), jcell(:)
+        integer ( kind = 4 ), intent(in) :: ids(8), id, np
+        integer ( kind = 4 ) :: tag,cont_db(8),cont_int(8)
+        type(lstr) :: LT
+        !  real(dp),intent(inout) :: celula(:,:)
+         ! IDS correspondem às celulas [N,S,E,W]
+        ! !print*, 'L SOMA', (ids(1) + ids(2) + ids(3) +ids(4)), 'ID', id
+        !!! ! print*, "L 464", id
+        cont_db = 0
+        cont_int = 0
+        !  if (id == 0) read(*,*) 
+      
+         ! Esvazia as celulas emprestadas 
+        if (domy(1) > 1) then
+            i = domy(1)-1
+            do j = domx(1),domx(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list) 
+                ! print*, associated(node), "A", id
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do
+                ! node => list_next(malha(i,j)%list) 
+                ! if (associated(node)) then
+                !     ! print*, "LIMPANDO A", i,j
+                !     ! ! print*, "L AA", ptr%p%n
+                !     ! print*, "AA", id
+                !     call list_free(malha(i,j)%list)
+                !     ! print*, "AAA", associated(node)
+                !     call list_init(malha(i,j)%list)
+                ! end if
+            end do
+        end if 
+        if (domy(2) < mesh(2)+2) then
+            i = domy(2)+1
+            do j = domx(1),domx(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! print*, associated(node), "B", id
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do 
+                ! node => list_next(malha(i,j)%list) 
+                ! if (associated(node)) then
+                !     ! print*, "LIMPANDO B", i,j
+                !     ! print*, "BB", id
+                !     call list_free(malha(i,j)%list)
+                !     ! print*, "BBB", associated(node)
+                !     call list_init(malha(i,j)%list)
+                ! end if
+            end do
+        end if 
+        if (domx(2) < mesh(1)+2) then
+            j = domx(2)+1
+            do i = domy(1),domy(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list) 
+                ! print*, associated(node), "D", id
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do 
+                ! node => list_next(malha(i,j)%list)
+                ! if (associated(node)) then
+                !     ! print*, "LIMPANDO C", i,j
+                !     ! print*, "DD", id
+                !     call list_free(malha(i,j)%list)
+                !     ! print*, "DDD", associated(node)
+                !     call list_init(malha(i,j)%list)
+                ! end if
+            end do
+        end if  
+        if (domx(1) > 1) then
+            j = domx(1)-1
+            do i = domy(1),domy(2)
+                node => list_next(malha(i,j)%list)
+                previous_node => malha(i,j)%list
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do
+                ! node => list_next(malha(i,j)%list)
+                ! if (associated(node)) then
+                !     ! print*, "LIMPANDO D", i,j
+                !     ! print*, "CC", id
+                !     ! ptr = transfer(list_get(node), ptr)
+                !     ! print*, ptr%p%n
+                !     call list_free(malha(i,j)%list)
+                !     ! print*, "CCC", associated(node)
+                !     call list_init(malha(i,j)%list)
+                ! end if
+            end do
+        end if 
+        ! PARA 4 processos. Limpa o que está na diagonal adjacente
+        if (np > 1 .and. sum(ids(5:8)) > -4) then  
+            if (domy(1) /= 1) i = domy(1) -1
+            if (domy(2) /= mesh(2)+2) i = domy(2) +1
+            if (domx(1) /= 1) j = domx(1) -1
+            if (domx(2) /= mesh(1) + 2) j = domx(2) +1 
+            previous_node => malha(i,j)%list
+            node => list_next(malha(i,j)%list)
+            do while (associated(node)) 
+                ptr = transfer(list_get(node), ptr)
+                deallocate(ptr%p)
+                call list_remove(previous_node)
+                node => list_next(previous_node)
+                ! node => list_next(node)
+            end do
+            ! node => list_next(malha(i,j)%list)
+            ! print*, "Limpando malha", i,j, "ID", id
+            ! if (associated(node)) then
+            !     ! print*, "LIMPANDO E", i,j
+            !     ! print*, "EE", id
+            !     ! ptr = transfer(list_get(node), ptr)
+            !     ! print*, ptr%p%n
+            !     call list_free(malha(i,j)%list)
+            !     ! print*, "EEE", associated(node)
+            !     call list_init(malha(i,j)%list)
+            ! end if
+        end if 
+        ! print*, "cont_int", cont_int
+        ! if (id == 0) read(*,*) 
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! print*, i,j, "id", id
+                 ! ptr%p%flag = true significa que ainda não foi computado para evitar loop
+                
+                if (associated(node))  then
+                    ptr = transfer(list_get(node), ptr)
+                    ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
+                    if (propriedade(ptr%p%grupo)%x_lockdelay > t) then
+                        ptr%p%flag = .false. 
+                    end if 
+                end if
+                
+                do while (associated(node) .and. ptr%p%flag)
+                    ! print*, "L PART", i,j, "id", id   
+                    m = propriedade(ptr%p%grupo)%m
+                    ! print*, 'grupo =', ptr%p%grupo, 'massa=', m
+                    ptr%p%flag = .false. 
+                    ! ptr = transfer(list_get(node), ptr)
+                    ptr%p%x(1) = ptr%p%x(1) + dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
+                    ptr%p%x(2) = ptr%p%x(2) + dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
+                    ! print*,'F_0  = ',ptr%p%F(1),ptr%p%F(2), "id", id
+                    ! print '("x_0  = [",f10.3,", ",f10.3, "] ", "i, j =", i2, " ", i2, " n ",i2 )',ptr%p%x(1),ptr%p%x(2),i,j, ptr%p%n!"id", id, "n", ptr%p%n
+                    ! Ordena as celulas
+                    x = ptr%p%x
+          
+                    ! Teste se escapou para a esquerda
+                    if (x(1) <= jcell(j-1)) then
+                        cell = [i,j-1]
+                        !para esquerda para cima
+                        if (x(2) <= icell(i-1)) then
+                            cell = [i-1,j-1]
+                        !para esquerda e para baixo
+                        else if (x(2) > icell(i)) then
+                            cell = [i+1,j-1]
+                        end if
+                        
+                    ! Teste se escapou para a direita
+                    else if (x(1) > jcell(j)) then
+                        cell = [i,j+1]
+                        !para direita para cima
+                        if (x(2) <= icell(i-1)) then
+                            cell = [i-1,j+1]
+                        !para direita e para baixo
+                        else if (x(2) > icell(i)) then
+                            cell = [i+1,j+1]
+                            ! print*, "icell(i)", icell(i), "jcell(j)", jcell(j), "x=", x
+                            ! ! print*, "L PUTAMERDA"
+                        end if       
+                     
+                    else if (x(2) <=  icell(i-1)) then
+                        ! print*,'!Teste se escapou para cima'
+                        ! print*,x(2) ,'<',  icell(i-1)
+                        cell = [i-1, j]
+                    !Teste se escapou para baixo
+                    else if (x(2) >  icell(i)) then
+                        ! print*,'!Teste se escapou para baixo'
+                        ! print*,x(2), '>',  icell(i)
+                        cell = [i+1,j]
+                    else 
+                        cell = [i,j]
+                    end if 
+
+                    ! print*, "Contint(1)", cont_int(1)
+                    
+                    ! VERIFICAÇÃO SE MUDOUD DE DOMÍNIO
+                    if (cell(1) /= i .or. cell(2) /= j)  then !Mudou de celula
+                        ! print*, "MUDOU"
+                        ! if (id == 0) read(*,*)
+                        ! Se a partícula chegar na fronteira do domínio que um processador
+                        ! cuida, então esta partícula é colocada na lista linkada referente
+                        ! a este célula com list_change. Além disso ela precisa ser 
+                        ! transferida para o outro processo vizinho para que ele possa 
+                        ! calcular sua influência no domínio.
+                        ! Se a partícula ultrapassar o domínio, então ela é transferida
+                        ! para o próximo processo e dealocada da lista com list_remove 
+                        ! ! ! print*, "L FORÇA", ptr%p%F, id
+                        if (cell(2) >= domx(2) .and. cell(2) < mesh(1)+2 ) then
+                            ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
+                            ! 6 elementos
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1),x(2), &
+                            ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            ! 4 elementos
+                            ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print*, "id",id,"transferindo para o leste",   LT%lstrint_E, "cont", cont_int(3)
+                            ! if (cell(2) > domx(2)) then
+                            !     ! print*, 'affs'
+                            !     ! read(*,*)
+                            !     print*, "Removido", ptr%p%n, "de malha", i,j
+                            !     print*, "Irá para", LT%lstrint_E
+                                
+                            !     ! call list_remove(previous_node)
+                            !     ! print*, 'affs'
+                            !     ! node => list_next(previous_node)
+                            ! ! else 
+                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
+                            ! !     node => list_next(previous_node)
+                            ! end if 
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                        end if 
+                        if (cell(2) <= domx(1) .and. cell(2) > 1) then
+                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                            ! print*, "domx", domx
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print*, "id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! if (cell(2) < domx(1)) then
+                            !     ! print*, 'affs'
+                            !     ! read(*,*)
+                            !     ! print*, "Removido", ptr%p%n, "de malha", i,j
+                            !     print*, "Removido", ptr%p%n, "de malha", i,j
+                            !     print*, "Irá para", LT%lstrint_W
+                                
+                            ! !     call list_remove(previous_node)
+                            ! !     node => list_next(previous_node)
+                            ! ! else 
+                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
+                            ! !     node => list_next(previous_node)
+                            ! end if 
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+                        end if 
+                        if (cell(1) >= domy(2) .and. cell(1) < mesh(2)+2) then
+                            ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
+                            ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! if (cell(1) > domy(1)) then
+                            !     ! read(*,*)
+                            !     ! print*, 'affs'
+                            !     ! call list_remove(previous_node)
+                            !     print*, "Removido", ptr%p%n, "de malha", i,j
+                            !     print*, "Irá para", LT%lstrint_N(cont_int(1)+1:cont_int(1)+4), "cont", cont_int(1)
+                            ! !     node => list_next(previous_node)
+                            ! ! else 
+                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
+                            ! !     node => list_next(previous_node)
+                            ! end if 
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+                        end if 
+                        if (cell(1) <= domy(1) .and. cell(1) > 1) then
+                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! ! print*, "L 583"
+                            ! print*, "id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! if (cell(1) < domy(1)) then
+                            !     ! read(*,*)
+                            !     ! print*, 'affs'
+                            !     ! call list_remove(previous_node)
+                            !     print*, "Removido", ptr%p%n, "de malha", i,j
+                            !     print*, "Irá para", LT%lstrint_S(cont_int(2)+1:cont_int(2)+4), "cont", cont_int(1)
+                            ! !     node => list_next(previous_node)
+                            ! ! else 
+                            ! !     !!!! ! print*, "L 590"
+                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
+                            ! !     node => list_next(previous_node)
+                            ! !     !!!! ! print*, "L 624"
+                            ! end if 
+                            cont_db(2) = cont_db(2) + 6
+                            cont_int(2) = cont_int(2) + 4
+                        end if
+
+                        ! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO
+
+                        ! Antes aqui tinha um else para o caso de não mudar de processo. 
+                        ! Removi todos os call list_remove e deixei que a partícula fosse para
+                        ! a área emprestada que será limpa na próxima execução de call comp_x. Isto pois a célula precisa
+                        ! sentir a presença da partícula que ela perdeu mas ficou ao lado 
+                        ! print*, "mudou2"
+                        ! if (id == 0) read(*,*)
+
+                        call list_change(previous_node,malha(cell(1),cell(2))%list)
+                        node => list_next(previous_node)
+ 
+                    else !Não mudou de celula
+                        ! Mas tem que avisar quais ainda estão na
+                        ! vizinhança
+                        
+                        ! print*, "NAO mudou cell",cell, "domx", domx, "domy", domy
+                        if (cell(2) == domx(2)) then
+                            !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            ! 6 elementos
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1),x(2), &
+                                ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            ! 4 elementos
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+
+                        else if (cell(2) == domx(1)) then
+                            !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                          !  ! print*, "L id",id,"transferindo para o oeste",  LT%lstrint_W
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+                        end if
+                        
+                        if (cell(1) == domy(1)) then
+                            !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                          !  ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(2) = cont_db(2) + 6
+                            cont_int(2) = cont_int(2) + 4
+
+                        elseif (cell(1) == domy(2)) then
+                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                          !  ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+                        end if
+                       
+                        previous_node => node
+                        node => list_next(node)
+                        ! print*, "L740 FORÇA", ptr%p%F, id
+
+                    end if
+                    if (associated(node))  then
+                        ptr = transfer(list_get(node), ptr)
+                        ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
+                        if (propriedade(ptr%p%grupo)%x_lockdelay > t) then
+                            ptr%p%flag = .false. 
+                        end if 
+                    end if
+                end do      
+            end do
+        end do
+        
+        ! transferir os termos que estão no encontro de 4 processos 
+        ! print*, "L 794", id
+        ! if (id == 0) read(*,*) 
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        if (np > 1 .and. sum(ids(5:8)) > -4) then
+            
+            do i = 5,8
+                !identifica qual o processo na diagonal
+                if (ids(i) > -1) then
+                    destD = i 
+                end if
+            end do
+            ! ! print*, "L 787", ids, "D", destD
+            ! Aqui está com suporte a 4 processadores por enquanto
+            ! Primeiro transfere para as celulas emprestadas
+            
+            if (domy(1) /= 1) i = domy(1)
+            if (domy(2) /= mesh(2)+2) i = domy(2)
+            if (domx(1) /= 1) j = domx(1)
+            if (domx(2) /= mesh(1) + 2) j = domx(2)
+            
+
+            previous_node => malha(i,j)%list
+            node => list_next(malha(i,j)%list)
+
+            if (associated(node)) ptr = transfer(list_get(node), ptr)
+            ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
+            do while(associated(node))
+                cell = [i, j]
+                ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                cont_db(destD) = cont_db(destD) + 6
+                cont_int(destD) = cont_int(destD) + 4 
+                previous_node => node
+                node => list_next(node)
+            end do
+            ! Segundo transfere para as celulas do domínio caso a partícula tenha mudado de processo
+            if (domy(1) /= 1) i = domy(1) -1
+            if (domy(2) /= mesh(2)+2) i = domy(2) +1
+            if (domx(1) /= 1) j = domx(1) -1
+            if (domx(2) /= mesh(1) + 2) j = domx(2) +1 
+        
+            previous_node => malha(i,j)%list
+            node => list_next(malha(i,j)%list)
+            if (associated(node)) ptr = transfer(list_get(node), ptr)
+            ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
+            do while(associated(node))
+                cell = [i, j]
+                ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                cont_db(destD) = cont_db(destD) + 6
+                cont_int(destD) = cont_int(destD) + 4 
+                previous_node => node
+                node => list_next(node)
+            end do
+            ! Fim da trasnfefência para diagonal
+        end if
+        
+        ! print*, "L 854", id
+        ! if (id == 0) read(*,*)
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        ! print*, "L SOMA", (ids(1) + ids(2) + ids(3) +ids(4)), "id", id  
+        ! print*, "enviando"
+        if (np > 1) then !se for paralelo 
+            ! call MPI_SEND(BUF, COUNT, DATATYPE, DEST, TAG, COMM, IERROR)
+            tag = 1
+            if (ids(1) >= 0) call MPI_SEND(LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION, ids(1), tag,MPI_COMM_WORLD, ierr)
+            if (ids(2) >= 0) call MPI_SEND(LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION, ids(2), tag,MPI_COMM_WORLD, ierr)   
+            if (ids(3) >= 0) call MPI_SEND(LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION, ids(3), tag,MPI_COMM_WORLD, ierr)   
+            if (ids(4) >= 0) call MPI_SEND(LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION, ids(4), tag,MPI_COMM_WORLD, ierr)   
+            if (sum(ids(5:8)) > -4) then
+                call MPI_SEND(LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION, ids(destD), tag,MPI_COMM_WORLD, ierr)
+            end if 
+            tag = 2 
+            if (ids(1) >= 0) call MPI_SEND(LT%lstrint_N, cont_int(1), MPI_integer, ids(1), tag,MPI_COMM_WORLD, ierr)
+            if (ids(2) >= 0) call MPI_SEND(LT%lstrint_S, cont_int(2), MPI_integer, ids(2), tag,MPI_COMM_WORLD, ierr)
+            if (ids(3) >= 0) call MPI_SEND(LT%lstrint_E, cont_int(3), MPI_integer, ids(3), tag,MPI_COMM_WORLD, ierr)
+            if (ids(4) >= 0) call MPI_SEND(LT%lstrint_W, cont_int(4), MPI_integer, ids(4), tag,MPI_COMM_WORLD, ierr)
+            if (sum(ids(5:8)) > -4) then 
+                call MPI_SEND(LT%lstrint_D, cont_int(destD), MPI_integer, ids(destD), tag,MPI_COMM_WORLD, ierr)
+            end if
+
+            ! print*, "L 935 TUDO ENVIADO", id
+            tag = 1
+            if (ids(1) >= 0) then  
+                call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION , cont_db(1) , ierr )
+                call MPI_RECV (LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION,ids(1), tag, MPI_COMM_WORLD, status, ierr)
+            end if 
+            
+            if (ids(2) >= 0) then 
+                call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(2) , ierr )
+                call MPI_RECV (LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION,ids(2), tag, MPI_COMM_WORLD, status, ierr)
+            
+            end if 
+            if (ids(3) >= 0) then
+                call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(3) , ierr )
+                call MPI_RECV (LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION,ids(3), tag, MPI_COMM_WORLD, status, ierr)
+            end if 
+
+            if (ids(4) >= 0) then
+                call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(4) , ierr )
+                call MPI_RECV (LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION,ids(4), tag, MPI_COMM_WORLD, status, ierr)
+            end if 
+
+            tag = 2
+            if (ids(1) >= 0) then
+                call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(1) , ierr )
+                call MPI_RECV (LT%lstrint_N, cont_int(1), MPI_integer,ids(1), tag, MPI_COMM_WORLD, status, ierr)
+            end if 
+            if (ids(2) >= 0) then
+                call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(2) , ierr )
+                call MPI_RECV (LT%lstrint_S, cont_int(2), MPI_integer,ids(2), tag, MPI_COMM_WORLD, status, ierr)
+            end if 
+            if (ids(3) >= 0) then
+                call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(3) , ierr )
+                call MPI_RECV (LT%lstrint_E, cont_int(3), MPI_integer,ids(3), tag, MPI_COMM_WORLD, status, ierr)
+            end if
+            if (ids(4) >= 0) then
+                call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(4) , ierr )
+                call MPI_RECV (LT%lstrint_W, cont_int(4), MPI_integer,ids(4), tag, MPI_COMM_WORLD, status, ierr)
+            end if
+            if (sum(ids(5:8)) > -4) then
+                tag = 1
+                ! RECEBE DA DIAGONAL (suporte para 4 processos)
+                ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
+                call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
+                call MPI_RECV (LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
+                tag = 2
+                ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
+                call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
+                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
+
+                ! DIAGONAL, tem que alterar para o caso com >4 processos
+                j = destD
+                do i = 0, cont_db(j)/6
+                    if (cont_db(j) > 0) then
+                        ! print*, "LA 1108"
+                        ! print*, "D al", id,  LT%lstrdb_D(i*6+1:i*6+2)
+                        allocate(ptr%p)
+                        ptr%p%x = LT%lstrdb_D(i*6+1:i*6+2)
+                        ! print*, ptr%p%x
+                        ptr%p%v = LT%lstrdb_D(i*6+3:i*6+4)
+                        ptr%p%grupo = LT%lstrint_D(i*4+4) 
+                        ptr%p%F = LT%lstrdb_D(i*6+5:i*6+6)
+                        ! ! print*, "L FORÇÆ", ptr%p%F
+                        ptr%p%n = LT%lstrint_D(i*4+3) !identidade da partícula importante para imprimir
+                        call list_insert(malha(LT%lstrint_D(i*4+1), &
+                            LT%lstrint_D(i*4+2))%list, data=transfer(ptr, list_data)) 
+                        ! print*, ptr%p%n, "D allocado em", LT%lstrint_D(i*4+1), LT%lstrint_D(i*4+2), "id =", id, "posição",ptr%p%x
+                        ! print*, "W allocado F = ",ptr%p%F
+                        cont_db(j) = cont_db(j) - 6
+                    end if
+                end do
+            end if
+
+            ! if (id == 0)  read(*,*)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+
+            !  call MPI_barrier(MPI_COMM_WORLD, ierr)
+            !  print*, 'ID APOS BARREIRA', id
+            ! print*, "L 1033"
+            do j = 1,4
+                do i = 0, cont_db(j)/6
+                    !! ! print*, "L 840" , i, j, "id", id, "cont_db/6", cont_db(j)/6
+                    if (j == 1 .and. cont_db(1) > 0 ) then
+                        ! print*, "LA 1133" 
+                        allocate(ptr%p)
+                        
+                        ptr%p%x = LT%lstrdb_N(i*6+1:i*6+2)
+                        ptr%p%v = LT%lstrdb_N(i*6+3:i*6+4)
+                        ptr%p%grupo = LT%lstrint_N(i*4+4) 
+                        ptr%p%F = LT%lstrdb_N(i*6+5:i*6+6)
+                        ! ! print*, "L FORÇÆ", ptr%p%F
+                        ptr%p%n = LT%lstrint_N(i*4+3) !identidade da partícula importante para imprimir
+                        ! !print*, 'LLLL', LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2)
+                        call list_insert(malha(LT%lstrint_N(i*4+1), &
+                            LT%lstrint_N(i*4+2))%list, data=transfer(ptr, list_data)) 
+                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
+                        ! print*, "N allocado F = ",ptr%p%F
+                        cont_db(j) = cont_db(j) - 6
+                        
+                    end if
+                    if (j == 2  .and. cont_db(2) > 0) then
+                        ! print*, "LA 1151"
+                        allocate(ptr%p)
+                        !! ! print*, "L 859 <<<"
+                        ptr%p%x = LT%lstrdb_S(i*6+1:i*6+2)
+                        ptr%p%v = LT%lstrdb_S(i*6+3:i*6+4)
+                        ptr%p%grupo = LT%lstrint_S(i*4+4) 
+                        ptr%p%F = LT%lstrdb_S(i*6+5:i*6+6)
+                        ! ! print*, "L FORÇÆ", ptr%p%F
+                        ptr%p%n = LT%lstrint_S(i*4+3) !identidade da partícula importante para imprimir
+                        !! ! print*, "L 865 <<<", LT%lstrint_S
+                        call list_insert(malha(LT%lstrint_S(i*4+1), &
+                            LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
+                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id,i
+                        ! print*, "S allocado F = ",ptr%p%F
+                        !! ! print*, "L 869 <<<"
+                        cont_db(j) = cont_db(j) - 6
+                    end if
+                    if (j == 3  .and. cont_db(3) > 0) then
+                        ! print*, "LA 1170"
+                        allocate(ptr%p)
+                        ptr%p%x = LT%lstrdb_E(i*6+1:i*6+2)
+                        ptr%p%v = LT%lstrdb_E(i*6+3:i*6+4)
+                        ptr%p%grupo = LT%lstrint_E(i*4+4) 
+                        ptr%p%F = LT%lstrdb_E(i*6+5:i*6+6)
+                        ! ! print*, "L FORÇÆ", ptr%p%F
+                        ptr%p%n = LT%lstrint_E(i*4+3) !identidade da partícula importante para imprimir
+                        call list_insert(malha(LT%lstrint_E(i*4+1), &
+                            LT%lstrint_E(i*4+2))%list, data=transfer(ptr, list_data)) 
+                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
+                        ! print*, "E allocado", LT%lstrint_E
+                        cont_db(j) = cont_db(j) - 6
+                    end if
+                    if (j == 4 .and. cont_db(4) > 0 ) then
+                        ! print*, "LA 1185"
+                        allocate(ptr%p)
+                        ptr%p%x = LT%lstrdb_W(i*6+1:i*6+2)
+                        ! print*, ptr%p%x
+                        ptr%p%v = LT%lstrdb_W(i*6+3:i*6+4)
+                        ptr%p%grupo = LT%lstrint_W(i*4+4) 
+                        ptr%p%F = LT%lstrdb_W(i*6+5:i*6+6)
+                        ! ! print*, "L FORÇÆ", ptr%p%F
+                        ptr%p%n = LT%lstrint_W(i*4+3) !identidade da partícula importante para imprimir
+                        call list_insert(malha(LT%lstrint_W(i*4+1), &
+                            LT%lstrint_W(i*4+2))%list, data=transfer(ptr, list_data)) 
+                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
+                        ! print*, "W allocado F = ",ptr%p%F
+                        cont_db(j) = cont_db(j) - 6
+                    end if  
+                end do
+            end do   
+            ! print*, "L 1106"
+              ! if (id == 0) read(*,*) 
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        end if
+
+        ! print*, "L 1115 fim comp_x", id
+        ! if (id == 0)  read(*,*)
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+    end subroutine comp_x
+    
+    ! atualiza velocidades
+    subroutine comp_v(malha,mesh,dt,t,propriedade,domx,domy)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j
+        integer, intent(in) :: mesh(2),domx(2),domy(2)
+        type(list_t), pointer :: node 
+        real(dp), intent(in) :: dt, t
+        type(data_ptr) :: ptr
+        
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+                node => list_next(malha(i,j)%list)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        m = propriedade(ptr%p%grupo)%m
+                        ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
+                        ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m)    
+                    end if
+                    ptr%p%F = [0,0]
+                    node => list_next(node)
+                end do
+            end do
+        end do
+    end subroutine comp_v
+    
+    subroutine walls(icell,jcell,mesh,malha,domx,domy,north,south,east,west,id)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        real(dp),intent(in) :: icell(:), jcell(:)
+        character(1), intent(in) :: north, south, east, west
+        type(list_t), pointer :: node, previous_node
+        integer :: i,j,cell(2)
+        integer, intent(in) :: mesh(:)
+        type(data_ptr) :: ptr,ptrn
+        integer, intent(in) :: domx(2), domy(2), id
+
+     !  ! print*, "L  1004",id
+        if (domy(2) == mesh(2)+2) then 
+           !! ! print*, "L 980", id
+            if (north == 'e') then !elastic
+                i = mesh(2) +2
+                do j = domx(1),domx(2)
+                    previous_node => malha(i,j)%list
+                    node => list_next(malha(i,j)%list)
+                    
+                    do while (associated(node))
+                        ! print*, "cell",i,j, "north"
+                        ptr = transfer(list_get(node), ptr)
+                        ptr%p%x(2) = 2*icell(mesh(2)+1) - ptr%p%x(2) 
+                        ptr%p%v(2) = -ptr%p%v(2)
+                        call list_change(previous_node,malha(i-1,j)%list)
+                        node => list_next(previous_node)    
+                        ! print*, 'part=',ptr%p%n, "cell",i,j                
+                    end do
+                end do
+            else if (north == 'o') then
+                i = mesh(2) +2
+                do j = domx(1), domx(2)
+                    previous_node => malha(i,j)%list               
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ! print*, "cell",i,j
+                        ptr = transfer(list_get(node), ptr)
+                        ptr%p%x(2) = 0.0/0.0
+                        ptr%p%v(2) = 0.0/0.0
+                        call list_remove(previous_node)
+                        node => list_next(previous_node)                    
+                    end do
+                end do           
+            else !periodic 
+                print*, oi
+            end if
+        end if
+        
+       !! print*, "Linha 1018",id
+        if (domy(1) == 1) then
+           !! ! print*, "L 1019", id
+            if (south == 'e') then
+                i = 1
+                do j = domx(1), domx(2)
+                    previous_node => malha(i,j)%list
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ! print*, "cell",i,j, "south", id
+                        ptr = transfer(list_get(node), ptr)
+                        ! print*, "cell",i,j
+                        ! print*, 'part=',ptr%p%n
+
+                        ptr%p%x(2) = -ptr%p%x(2)  
+                        ptr%p%v(2) = -ptr%p%v(2)
+                        call list_change(previous_node,malha(2,j)%list)
+
+                        node => list_next(previous_node)                    
+                    end do
+                end do
+            else if (south == 'o') then
+                i = 1
+                do j = domx(1), domx(2)
+                    
+                    previous_node => malha(i,j)%list              
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        ptr%p%x(2) = 0.0/0.0 
+                        ptr%p%v(2) = 0.0/0.0
+                        call list_remove(previous_node)
+                        node => list_next(previous_node)                    
+                    end do
+                end do           
+            else !periodic 
+                print*, oi
+            end if 
+        end if 
+       !! ! print*, "L 1057", id
+        if (domx(1) == 1) then
+            if (west == 'e') then
+                j = 1
+                do i = domy(1), domy(2)
+                    previous_node => malha(i,j)%list
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        ! print*, "n", ptr%p%x 
+                        ptr%p%x(1) = -ptr%p%x(1)
+                        ptr%p%v(1) = -ptr%p%v(1)
+                        call list_change(previous_node,malha(i,2)%list)
+                        node => list_next(previous_node)    
+                    end do
+                end do    
+            else if (west == 'o') then
+                j = 1
+                do i = domy(1), domy(2)
+                    previous_node => malha(i,j)%list
+                    
+                    node => list_next(malha(i,j)%list)
+                    !  ! !print*, 'Linha 236', associated(previous_node)
+                    do while (associated(node))
+                        !  print*,'N'!,x(ptr,2)
+                        !read(*,*)
+                        ptr = transfer(list_get(node), ptr)
+                        ptr%p%x(2) = 0.0/0.0 
+                        ptr%p%v(2) = 0.0/0.0
+                        call list_remove(previous_node)
+                        !  previous_node => node
+                        node => list_next(previous_node)                    
+                    end do
+                end do           
+            else !periodic 
+                print*, oi
+            end if
+        end if
+        if (domx(2) == mesh(1) +2) then
+            if (east == 'e') then
+                j = mesh(1)+2
+                do i = domy(1), domy(2)
+                    ! print*, "A"
+                    previous_node => malha(i,j)%list
+                    ! print*, "B"
+                    node => list_next(malha(i,j)%list)
+                    ! print*, "C"
+                    do while (associated(node))
+                        ! print*, "cell",i,j, "east"
+                        ptr = transfer(list_get(node), ptr)
+                        ! print*, "E"
+                        ptr%p%x(1) = 2*jcell(mesh(1)+1) - ptr%p%x(1) 
+                        ptr%p%v(1) = -ptr%p%v(1)
+                        ! print*, "F"
+                        call list_change(previous_node,malha(i,j-1)%list)
+                        ! print*, "G"
+                        node => list_next(previous_node)   
+                    end do
+                end do
+            else if (east == 'o') then
+                j = mesh(1)+2
+                !  print*,'j = ',j
+                do i = domy(1), domy(2)
+                    previous_node => malha(i,j)%list
+                    
+                    node => list_next(malha(i,j)%list)
+                     !print*, 'Linha 236', associated(previous_node)
+                    do while (associated(node))
+                        !  print*,'N'!,x(ptr,2)
+                        !read(*,*)
+                        ptr = transfer(list_get(node), ptr)
+                        ptr%p%x(1) = 0.0/0.0 
+                        ptr%p%v(1) = 0.0/0.0
+                        call list_remove(previous_node)
+                        !  previous_node => node
+                        node => list_next(previous_node)                    
+                    end do
+                end do           
+            else !periodic 
+                print*, oi
+            end if
+        end if
+        ! print*,"linha 1146 ok"
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+     !    !read(*,*)
+    end subroutine walls
+!     
+    subroutine distribuicao_inicial(malha,N,mesh)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j,aux1
+        integer, intent(in) :: N,mesh(2)
+        type(list_t), pointer :: node
+        type(data_ptr) :: ptr
+        
+        
+        do i = 1,mesh(2)+2
+            do j = 1,mesh(1)+2
+                node => list_next(malha(i,j)%list)
+                aux1 = 0
+                do while (associated(node))
+                    aux1 = aux1 +1
+                    ptr = transfer(list_get(node), ptr)
+                    ! celula(ptr,:) = [j,i]
+                    print *, 'posição', i, ',', j
+                    print *, ptr%p%x
+                    node => list_next(node)
+                    if (aux1 > N) then
+                        print*, 'deu ruim'
+                        exit
+                    end if
+                end do
+            end do
+        end do
+    end subroutine distribuicao_inicial
+
+    subroutine clean_mesh(malha, mesh, domx, domy,id, tudo)
+        !  This subroutine cleans the unaccessible cells of each process bounded by domx, domy
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j, k = 0
+        integer, intent(in) :: mesh(2),domx(2),domy(2)
+        type(list_t), pointer :: node, previous_node
+        type(data_ptr) :: ptr
+        logical, intent(in) :: tudo 
+        ! print*, "AAA", id
+        if (tudo) k = 1
+        do i = 2-k,mesh(1)+1+k
+            do j = 2-k, mesh(2)+1+k
+                if (((i < domy(1)-1 .or. i > domy(2)+1) .and. (j < domx(1)-1 .or. j > domx(2)+1)) .or. tudo) then 
+                    node => list_next(malha(i,j)%list)
+                    ! print*, "i,j,id", i,j, id
+                    do while (associated(node)) 
+                        ptr = transfer(list_get(node), ptr)
+                        deallocate(ptr%p)
+                        node => list_next(node)
+                    end do
+                    node => list_next(malha(i,j)%list) 
+                    if (associated(node)) then
+                        call list_free(malha(i,j)%list)
+                        call list_init(malha(i,j)%list)
+                        ! if (.not. tudo) then
+                        !     print*, "BBB"
+                        ! else
+                        !     print*, "CCC"
+                        ! end if 
+                    end if
+                end if
+            end do
+        end do
+
+        if (tudo) then
+            do i = 2-k,mesh(1)+1+k
+                do j = 2-k, mesh(2)+1+k
+                    deallocate(malha(i,j)%list)
+                end do
+            end do
+            ! dellocate( )
+        end if
+
+    end subroutine clean_mesh
+
+end module mod2
+
+
+! Este módulo escreve csv
+module saida
+    contains
+    subroutine vec2csv(v,n,d,prop,step,t,nimpre,start)
+        use mod1
+        !N é o número de partículas e d é a dimensão da propriedade
+        ! cada linha é uma partícula 
+        implicit none
+        integer, intent(in) :: n,d
+        real(dp), intent(in) :: v(n,d), t, start
+        integer :: i,step, nimpre
+        character(*) :: prop
+        character(4) :: extensao = '.csv', passo
+        real(dp) :: time
+        real(dp), save :: timep, etc, dtimepp
+
+        write(passo,'(i0)') step
+        open(10,file='temp/'//prop//extensao//'.'//trim(passo),status="replace")
+        if (d == 1) then
+            do i = 1,n
+                write(10,*) v(i,1)
+            end do
+        else if (d == 2) then
+            do i = 1,n
+                write(10,*) v(i,1),',',v(i,2)
+            end do
+        else
+            do i = 1,n
+                write(10,*) v(i,1),',',v(i,2),',',v(i,3)
+            end do
+        end if
+        close(10)
+
+        if (prop == "position") then 
+            if (step == 0) timep = 0
+            call cpu_time(time)    
+            if (step == 1) then 
+                etc = ((time - start)/step+ (time-timep))*0.5*nimpre - (time - start)
+                dtimepp = (time-timep)
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
+            else if (step > 1) then
+                etc = ((time - start)*2/step + ((time-timep)*4 + dtimepp*4))*(nimpre-step)/10 
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
+                dtimepp = (time-timep)
+            else 
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
+            end if
+
+            timep = time 
+        else 
+            if (step > 0) then 
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
+            else 
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
+            end if
+            timep = time
+        end if     
+        ! print*, 'Salvo arquivo ',prop//extensao//'.'//trim(passo), "t =", t, "ETC: ", etc 
+        
+    end subroutine vec2csv 
+    
+    subroutine linked2vec(malha,domx,domy,nxv,aux1)
+       
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j,aux1
+        integer, intent(in) :: domx(2), domy(2)
+        type(list_t), pointer :: node
+        real(dp), intent(out) :: nxv(:)
+        type(data_ptr) :: ptr
+
+        aux1 = 1
+!         real(dp),intent(inout) :: celula(:,:)
+        
+        do i = domy(1), domy(2)
+            do j = domx(1), domx(2)
+               ! print *, 'posição', i, ',', j
+                node => list_next(malha(i,j)%list)
+    !             print*, i,j
+    !             print*, 'is associated?', associated(node)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    nxv(aux1:aux1+4) = [ real(ptr%p%n, kind(0.d0)), ptr%p%x(1),ptr%p%x(2), &
+                    ptr%p%v(1), ptr%p%v(2)]
+                    aux1 = aux1 + 5
+                    node => list_next(node)
+                end do
+            end do
+        end do
+        aux1 = aux1 -1
+        
+    end subroutine linked2vec    
+    
+    subroutine nancheck(malha,mesh,t) 
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+
+        real(dp), intent(in) :: t
+        integer :: i 
+        integer, intent(in) :: mesh(:)
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(data_ptr) :: ptr
+        type(list_t), pointer :: node
+        do i = 1,mesh(2)+2 
+            do j = 1,mesh(1)+2
+                node => list_next(malha(i,j)%list)
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    !calcula a energia cinética atual
+                    node => list_next(node)
+                    if (isnan(ptr%p%x(1))) then
+                        print*, 'NaN em part',ptr%p%n,'x, t=',t
+                    end if
+                    if (isnan(ptr%p%x(2))) then
+                        print*, 'NaN em part',ptr%p%n,'y, t=',t
+                    end if
+                end do
+            end do
+        end do        
+
+
+
+        do i = 1,N
+
+        end do
+    end subroutine nancheck
+    
+end module saida
+
+program main
+    use mod1
+    use linkedlist
+    use data
+    use mod0
+    use matprint
+    use saida
+    use m_config
+    use mod2
+    use randnormal
+    use mpi
+
+    implicit none
+!    Variáveis
+
+    integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2)
+    integer :: subx, suby, NMPT, j2
+    integer, target :: k
+    real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
+    real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
+    real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,fric_term,vd(2)
+    real(dp) :: GField(2), temp_Td(3), dimX, dimY
+    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)
+    type(container), allocatable,dimension(:,:) :: malha
+    type(prop_grupo),allocatable,dimension(:) :: propriedade
+    type(list_t), pointer :: node
+ !   Variáveis do arquivo de configuração 
+    type(CFG_t) :: my_cfg
+    character(5) :: particle
+    character(4) :: wall
+    character(11) :: nome,arquivo !nome de partícula deve ter até 11 caracteres
+    type(string) :: part_nomes(10) ! vetor de strings
+    character(1) :: optio
+    type(data_ptr) :: ptr !integer,pointer :: ptr,ptrn
+    logical :: laux, termostato
+    character(len=32) :: arg
+    character :: arg1(1)
+    type(lstr) :: LT
+    integer ( kind = 4 ) status(MPI_STATUS_SIZE)
+    integer ( kind = 4 ) ierr
+    integer ( kind = 4 ) np
+    integer ( kind = 4 ) tag
+    integer ( kind = 4 ) id, ids(8)
+
+    ! depois ver se não da pra fazer tudo serialmente
+    call MPI_Init ( ierr )
+    call MPI_Comm_rank ( MPI_COMM_WORLD, id, ierr )                            
+    call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
+
+    ! argumento para checar NAN no nancheck
+    call get_command_argument(1, arg)
+    arg1 = trim(arg)
+    
+!    CONDIÇÕES INICIAIS/CORTORNO E PROPRIEDADES
+    ! Propriedades que cobrem todo um grupo de partículas
+    !  serão armazenadas na estrutura propriedade(grupo)
+!    Inicia o método de configuração
+    call CFG_add(my_cfg, "global%N",1,&
+      "number of particles")
+    call CFG_add(my_cfg, "global%Ntype",1,&
+      "number of types")
+    call CFG_add(my_cfg, "global%dt",0.0_dp,&
+      "time step")
+    call CFG_add(my_cfg, "global%t_fim",0.0_dp,&
+      "simulation time")
+    call CFG_add(my_cfg, "global%nimpre",1,&
+      "number of result files")
+    call CFG_add(my_cfg, "global%dimX",1.0_dp,&
+      "y-dimension of the region of calculus")  
+    call CFG_add(my_cfg, "global%dimY",1.0_dp,&
+      "y-dimension of the region of calculus")    
+    call CFG_add(my_cfg, "global%mesh",(/0, 0/),&
+      "mesh size")  !celulas
+    call CFG_add(my_cfg, "global%sigma",1.0_dp,&
+      "Leonard-Jones sigma factor")        
+    call CFG_add(my_cfg, "global%epsilon",1.0_dp,&
+      "Leonard-Jones epsilon factor")   
+    call CFG_add(my_cfg, "global%rcut",1.0_dp,&
+      "Cut radius")
+    call CFG_add(my_cfg,"global%wall",'eeee', &
+        "wall's periodic vs elastic") 
+    call CFG_add(my_cfg,"global%Td",-1.0_dp, &
+        "Thermostat")
+    call CFG_add(my_cfg,"global%temp_Td",(/0.0_dp, 0.0_dp, 0.0_dp/), &
+        "Thermostat iteractions time")
+    call CFG_add(my_cfg,"global%vd",(/0.0_dp, 0.0_dp/), &
+        "Mean vd")            
+    call CFG_add(my_cfg,"global%fric_term",1.0_dp, &
+        "Friction term")       
+    call CFG_add(my_cfg,"global%NMPT",1, &
+        "Max Number of particles that will change process per iteraction")
+    call CFG_add(my_cfg,"global%GField",(/0.0_dp, 0.0_dp/), &
+        "Uniform Gravitational Field")
+   
+    call CFG_read_file(my_cfg, "settings.ini")
+    call CFG_get(my_cfg,"global%N",N)
+    call CFG_get(my_cfg,"global%Ntype",Ntype)
+    call CFG_get(my_cfg,"global%t_fim",t_fim)
+    call CFG_get(my_cfg,"global%dt",dt)
+    call CFG_get(my_cfg,"global%nimpre",nimpre)
+    call CFG_get(my_cfg,"global%dimX", dimX)
+    call CFG_get(my_cfg,"global%dimY", dimY)
+    call CFG_get(my_cfg,"global%mesh",mesh)
+    call CFG_get(my_cfg,"global%rcut",rcut)
+    call CFG_get(my_cfg,"global%wall",wall)
+    call CFG_get(my_cfg,"global%Td",Td)
+    call CFG_get(my_cfg,"global%temp_Td",temp_Td)
+    call CFG_get(my_cfg,"global%vd",vd)
+    call CFG_get(my_cfg,"global%fric_term",fric_term)
+    call CFG_get(my_cfg,"global%NMPT",NMPT)
+    call CFG_get(my_cfg,"global%GField",GField)
+    
+
+    if (NMPT < 1) NMPT = N
+    printstep = ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) 
+    if (printstep < 1) printstep = 1
+    !aloca as Variáveis com base no número de partículas
+    allocate(v(N,2),x(N,2),grupo(N),interv(nimpre),interv_Td(nint(printstep)), & 
+        jcell(mesh(2)+1),icell(mesh(1)+1),celula(N,2),propriedade(Ntype))
+    allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
+    LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
+    ! allocate(nxv(N*5),nxv_send(N*5))
+
+    aux2 = dimX/mesh(1)
+    jcell = (/((i*aux2),i = 0,mesh(1))/) ! direção x
+    
+    aux2 = dimY/mesh(2)
+    icell = (/((i*aux2),i = 0,mesh(2))/) ! direção Y
+   
+    
+    do i = 0,(Ntype-1)     
+        if (id == 0) write(*,'(a,i0)') 'par_',i
+        write(particle,'(a,i0)') 'par_',i
+        call CFG_add(my_cfg, particle//"%m",1.1_dp,&
+           "mass of "//particle)
+        call CFG_add(my_cfg, particle//"%v",(/0.0_dp, 0.0_dp/), &
+            "velocity of "//particle)         
+        call CFG_add(my_cfg, particle//"%x","arquivo.csv", &
+            "position of "//particle)     
+        call CFG_add(my_cfg, particle//"%nome",'abcde', &
+            "name of "//particle)  
+        call CFG_add(my_cfg, particle//"%quantidade",1, &
+            "quantity of "//particle)   
+        call CFG_add(my_cfg, particle//"%epsilon",1.1_dp, &
+            "sigma "//particle)   
+        call CFG_add(my_cfg, particle//"%sigma",1.1_dp, &
+            "epsilon"//particle)  
+        call CFG_add(my_cfg, particle//"%x_lockdelay",1.1_dp, &
+            "change in position delay "//particle)       
+    end do
+    
+    
+    do i = 0,(Ntype-1)
+         write(particle,'(a,i0)') 'par_',i
+        
+         call CFG_get(my_cfg, particle//"%quantidade", quant)
+         call CFG_get(my_cfg, particle//"%nome", nome)
+         part_nomes(i+1)%str = nome
+         call CFG_get(my_cfg, particle//"%x", arquivo)
+         call CFG_get(my_cfg, particle//"%m", propriedade(i+1)%m)
+         call CFG_get(my_cfg, particle//"%epsilon", propriedade(i+1)%epsilon)
+         call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
+         call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
+        ! le o arquivo com posições
+         
+         open(20,file=arquivo,status='old')
+         do j = 1,quant
+            call CFG_get(my_cfg, particle//"%v", v(cont,:))    
+            grupo(cont) = i+1
+            read(20,*) x(cont,:) !,x(cont,2),x(cont,3)
+            cont = cont+1
+        end do
+    end do
+  
+   ! mostra informações lidas
+    if (id == 0) then
+        call CFG_write(my_cfg, "settings.txt") 
+        print*, "Nomes das partículas"
+        do i = 1,Ntype
+            print*, part_nomes(i)%str
+        end do
+    end if     
+    
+    !--------------------------------------------------!
+    ! CRIA LISTAS LIGADAS
+
+    !cada elemento da matriz representa uma celula da malha
+    allocate(malha(mesh(2)+2,mesh(1)+2)) ! o primeiro e últimos índices correspondem a 
+                                         ! celulas fantasma
+    !inicialização
+    k = 0
+    do i = 1,mesh(2)+2 !linha
+        do j = 1,mesh(1)+2
+            ! allocate(ptr%p)
+            ! ptr%p%x = [0,0]
+            ! ptr%p%v = [0,0]
+            ! ptr%p%grupo = 0
+            ! ptr%p%F = [0,0]
+            ! ptr%p%n = k
+            ! ptr%p%flag = .true. ! flag auxiliar para uso  
+            call list_init(malha(i,j)%list) !, DATA=transfer(ptr, list_data))
+        end do
+    end do
+    ! Vetor que indica quando imprimir
+    printstep = nint(t_fim/dt)/nimpre
+    interv = (/(printstep*i,i=0,nimpre) /)
+    ! Vetor que indica quando fazer velocity scaling
+    printstep = nint(temp_Td(3))
+    interv_Td = (/(printstep*i,i=0,nint( ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) )) /)
+    interv_Td = interv_Td + nint(temp_Td(1)/dt)
+    i = 0
+
+    if (Td == 0) then
+        Td = (2/(3*N*kb))*sum(0.5*propriedade(ptr%p%grupo)%m*(v(:,1)**2+v(:,2)**2))
+    else if (Td < 0) then
+        interv_Td = -1
+    end if
+! print*, "2073"
+    !Aloca as partículas nas celulas
+    do k = 1,cont-1
+        
+        laux = .true.
+
+        j = 2
+        do while (laux)
+            if (x(k,1) > jcell(j)) then
+                j = j+1
+            else
+                laux = .false.       
+            end if 
+        end do
+        
+        laux = .true.
+        i = 2
+        do while (laux)
+            if (x(k,2) > icell(i)) then
+                i = i+1
+            else
+                laux = .false. 
+            end if 
+        end do        
+        !i e j contém agora a posição da partícula na matriz malha
+        
+        allocate(ptr%p)
+        ptr%p%x = x(k,:)
+        ptr%p%v = v(k,:)
+        ptr%p%grupo = grupo(k)
+        ptr%p%F = [0,0] !passo 1 do SV
+        ptr%p%n = k !identidade da partícula importante para imprimir
+        call list_insert(malha(i,j)%list, data=transfer(ptr, list_data)) 
+    end do
+
+    deallocate(grupo)
+
+    ! adiciona às particulas velocidade inicial de acordo com distribuição maxwell boltzmann
+    if (vd(1) /= 0 .and. vd(2) /= 0 .and. vd(1) /= 0) call MaxwellBoltzmann(malha,mesh,sqrt(vd))
+
+    !-------------------------------------------------!
+    ! ITERAÇÕES
+    
+    ! imprime condições iniciais
+
+
+    if (id == 0) then
+        
+        j = 0 
+        call system('mkdir temp') !pasta temporária para armazenar os resultados
+        ! call linked2vec(malha,domx,domy,nxv,aux1)
+        call vec2csv(x,N,2,'position',j,t,nimpre,start)
+        call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
+        ! call vec2csv(celula,N,2,'cell',j)
+        j = j + 1
+
+        ! print*,'V_tot0 = ',comp_pot(mesh,malha,propriedade,rcut)
+    end if         
+
+    !! AQUI COMEÇA O PARALELISMO                                           
+
+    ! só vai funcionar com serial e np par
+    ! Descobir a melhor forma de dividir a malha
+    
+    if (dimX > 3*dimY .and. np > 1) then
+        subx = 4
+        suby = 1
+    else if (dimY > 3*dimX .and. np > 1) then
+        subx = 1
+        suby = 4
+    else if (np > 1) then
+        subx = 2
+        suby = 2
+    else 
+        subx = 1
+        suby = 1
+    end if  
+
+    np = subx*suby
+    ! print*, "NP", np
+    ids = [-1,-1,-1,-1,-1,-1,-1,-1]
+
+    if (np > 2) then
+        L_O: do j = 0, (suby-1)
+            do i = 0, (subx-1)
+                if (id == (i+j*suby)) then 
+                    ! ids = [N,S,E,W, NE, NW, SE, SW]
+                    ! Depois tentar para caso geral 
+                    ! ids = [(j-1)*subx +i, (j+1)*subx +i, &
+                    !         j*subx + i +1, -(i>0)*(j*subx + i)-1]
+                    ! if (ids(1) < 0) ids(1) = -1
+                    ! if (ids(4) < 0) ids(4) = -1 
+                    ! if (j == suby-1) ids(2) = -1
+                    ! if (i == subx -1) ids(3) = -1 
+                    if (subx == 2) then
+                        if (id == 0) then 
+                            ids = [2, -1, 1,-1, 3, -1, -1, -1]
+                        else if (id == 1) then
+                            ids = [3, -1, -1, 0, -1, 2, -1, -1]
+                        else if (id == 2) then
+                            ids = [-1, 0, 3, -1, -1, -1, 1, -1]
+                        else 
+                            ids = [-1, 1, -1, 2, -1, -1, -1, 0]
+                        end if
+                    else if (subx == 4) then
+                        if (id == 0) then 
+                            ids = [-1, -1, 1,-1, -1, -1, -1, -1]
+                        else if (id == 1) then
+                            ids = [-1, -1, 2, 0, -1, -1, -1, -1]
+                        else if (id == 2) then
+                            ids = [-1, -1, 3, 1, -1, -1, -1, -1]
+                        else 
+                            ids = [-1, -1, -1, 2, -1, -1, -1, -1]
+                        end if
+                    else if (suby == 4) then
+                        if (id == 0) then 
+                            ids = [1, -1, -1, -1, -1, -1, -1, -1]
+                        else if (id == 1) then
+                            ids = [2, 0, -1, -1, -1, -1, -1, -1]
+                        else if (id == 2) then
+                            ids = [3, 1, -1, -1, -1, -1, -1, -1]
+                        else 
+                            ids = [-1, 2, -1, -1, -1, -1, -1, -1]
+                        end if
+                    end if 
+                    domx = [i*int((mesh(1)+2)/subx)+1, (i+1)*int((mesh(1)+2)/(subx))]
+                    domy = [j*int((mesh(2)+2)/suby)+1, (j+1)*int((mesh(2)+2)/(suby))]
+                    exit L_O
+                end if
+            end do
+        end do L_O
+    else 
+        domx = [1,mesh(1)+2]
+        domy = [1,mesh(2)+2]
+    end if
+
+    print '("id = ",I2, "; domx = [",I3," ",I3, "]; domy = [",I3," ",I3, "]; icell = [",F10.3," ",F10.3,"] jcell = [",F10.3," ",F10.3,"]")' &
+    , id, domx(1),domx(2), domy(1), domy(2), icell(domy(1)),  icell(domy(2)-1), jcell(domx(1)),  jcell(domx(2)-1)
+    print '("id = ", I2, " ids = [", I2, " ", I2, " ", I2, " ", I2,"]")', id, ids(1), ids(2), ids(3), ids(4)
+    ! libera a memória utilizada pelos processos não-raiz
+    ! pois eles não vão imprimir x e v pra csv
+    if (id /= 0) then
+        deallocate(v,x)
+    end if
+    ! aloca alguns vetores utilizados para o mpi_gatherv
+    allocate(rcounts(np), displs(np))
+
+    ! print '("Mesh divided in ", I2, "x", I2, " subregions."  )', subx, suby
+    ! print*, 'ID ', id, 'iterv ', interv
+    call clean_mesh(malha, mesh, domx, domy,id,.false.)
+    ! print*, "bbb", id
+    if (id == 0) then
+        print*,'Press Return to continue'
+       ! read(*,*)
+    end if
+    call MPI_barrier(MPI_COMM_WORLD, ierr)
+    
+    ! id = 0 é o processo raiz 
+    if (id == 0)  call cpu_time(start)
+
+    ! Agora dividimos para cada id uma região. 
+    i = 0
+    j = 1
+    j2 = 1
+    do while (t_fim > t)
+        ! print*, "L 1990"
+        call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t)  !altera Força
+        
+        ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
+        ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
+        ! que o processo vai cuidar (subdivisões)
+        ! print*, "L 1702", id
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        ! print*, "L 1999", id
+        !  if (id == 0) print*, "TEMPO", t, '<<<<<<<<<<', id, i
+        call comp_x(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,id, np) ! altera posição
+        ! print*, "L 2002", id
+        ! if (id == 0) read(*,*)
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        
+        call walls(icell,jcell,mesh,malha,domx,domy,wall(1:1),wall(2:2),wall(3:3),wall(4:4),id) ! altera posição e malha
+        
+        ! print*, "L 1714", id
+        ! if (id == 0) read(*,*)
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t) !altera força
+        ! print*, "L 1717"
+        call comp_v(malha,mesh,dt,t,propriedade,domx,domy) !altera velocidade
+        ! print*, "1721"
+
+        t = t + dt
+        cont2 = cont2+1
+
+        if (i == interv_Td(j2)) then
+            call corr_K(malha,domx,domy,N,Td,propriedade, np,id,t)
+            j2 = j2 + 1
+        end if 
+        
+        if (i == interv(j)) then
+            deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
+            LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
+            allocate(nxv(N*5),nxv_send(N*5))
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+            ! print*, 'MANDANDO PRINTAR', id, i
+            
+            call linked2vec(malha,domx,domy,nxv_send,aux1)
+            ! ! ! print*, "L nxv_send", nxv_send  
+            !! print*, "LINKED 2 VEC, id", id, "aux1", aux1
+            if (np > 1) then ! paralelo
+                ! call MPI_GATHER(sbuf, scount, MPI_integer, rbuf, rcount, MPI_integer, root, MPI_COMM_WORLD, ierr)
+                call MPI_GATHER(aux1,     1,    MPI_integer, rcounts, 1,   MPI_integer,  0,   MPI_COMM_WORLD, ierr)
+
+                ! print*, "Aux1 =", aux1, "id =", id
+                ! if (id == 0) print*, "rcounts =", rcounts
+                ! !print*, 'L IMPRE >', id
+                displs = 0
+
+                if (id == 0) then
+                    do ii = 2,np
+                        displs(ii) = displs(ii-1) + rcounts(ii-1)
+                    end do
+                    ! print*, "displs", displs
+                end if
+                ! print*,'E_tot0 = ',(comp_pot(mesh,malha,propriedade,rcut) +comp_K(malha,mesh,propriedade))
+                ! MPI_GATHERV    (sbuf,   scount,        stype,       rbuf, rcounts,  displs,       rtype,       root,  comm,         ierr)
+                call MPI_GATHERV(nxv_send, aux1, MPI_DOUBLE_PRECISION, nxv, rcounts, displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+                
+                ! o processo raiz imprime os resultados
+                ! print*, "id", id, "nxv_send:", nxv_send(1:aux1)
+
+                ! if (id == 0) print*, "nxv:", nxv
+
+            else 
+                nxv = nxv_send
+            end if 
+            
+            if (id == 0) then
+                do ii = 0, N-1
+
+                    x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3)]
+                    ! print*, 'x= ',[nxv(ii*5+2),nxv(ii*5+3)], 'i=',int(nxv(ii*5+1))
+                    v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5)]
+                end do
+                
+                call vec2csv(x,N,2,'position',j,t,nimpre,start)
+                call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
+            
+            end if
+            ! if (id == 0) read(*,*)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+            j = j+1
+            deallocate(nxv,nxv_send)
+            allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
+                 LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
+        end if
+        i = i+1
+        ! print*, "L 1754 >", id
+        ! if (id  == 0) read(*,*)    
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+    end do
+
+    ! print*, 'L 2112', id 
+    ! if (id == 0) read(*,*)
+    ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+    call clean_mesh(malha, mesh, domx, domy,id,.true.)
+    deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
+            LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
+    if (id == 0)  then
+        call cpu_time(finish)
+        print '("Time = ",f10.3," seconds.")',(finish-start)
+        open(unit=22,file='settings.txt',status="old", position="append", action="write")
+        write(22,*) "Execution time = ",(finish-start)," seconds."
+        close(22)
+        !call system('python csv2vtk_particles.py')
+    end if
+    
+    ! print*, 'L 1808'
+    call MPI_Finalize ( ierr )
+end program main                
