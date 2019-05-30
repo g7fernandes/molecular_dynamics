@@ -29,8 +29,6 @@ module mod0
             integer,allocatable :: lstrint_W(:)
             integer,allocatable :: lstrint_D(:)
         end type lstr
-
-
 end module mod0
 
 module mod2
@@ -87,19 +85,12 @@ module mod2
         V = 0
         do i = 1,mesh(1)+2
             do j = 1,mesh(2)+2
-!                  ! !print*, 'Linha 67',i,j
-                ! dentro da malha(i,j)
                 node => list_next(malha(i,j)%list)
-!                 print*,'B',i,j
-!                 print*,associated(node),i,j
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr) !particula selecionada
                     x1 = ptr%p%x
-!                     ! !print*, 'L73'
-!                     !read(*,*)
                     !calcular a força desta com todas as outras partículas
                     next_node => list_next(node) ! próxima partícula da célula
-!                     ! !print*, 'L77',ptr
                     node => list_next(node) ! a ser computado com a particula selecionada
                     do while (associated(node))
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
@@ -141,9 +132,7 @@ module mod2
                     end if
                     
                 end do
-            !    print*,'linha137'
             end do
-!              print*,'L143 LJ'
         end do
         
         V = V*4*epsil        
@@ -295,8 +284,6 @@ module mod2
              
                     ! NA PRÓPRIA CELULA 
                     do while (associated(node))
-                        ! print*, "x2", x2 
-                        ! print*, "ID", id
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                         sigma_b = propriedade(ptrn%p%grupo)%sigma
                         epsil_b = propriedade(ptrn%p%grupo)%epsilon 
@@ -317,7 +304,6 @@ module mod2
                         x2 = ptrn%p%x
                         v2 = ptrn%p%v
                         r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
-                        ! print '("r ", f10.5, " rcut", f10.5)',r,rcut
                         if (r <= rcut) then
                             aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]  
                             if (fric_term > 0) then
@@ -330,11 +316,11 @@ module mod2
                     end do
 
                     !! PARA CASO PARALELO, INTERAGIR COM AS CELULAS AO NORTE E A OESTE
-                    !
                     ! SUL
                     if (ids(2) > -1 .and. i == domy(1)) then
                         node => list_next(malha(i-1,j)%list) !interagirá com a anterior linha apenas
                         do while (associated(node))
+                            
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
@@ -427,7 +413,7 @@ module mod2
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio                            
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio   
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -768,14 +754,10 @@ module mod2
                             node => list_next(node) ! próxima partícula da célula                                
                         end do
                     end if
-                    ! ! ! print*, "L F431", ptr%p%F, id,i,j
                     node => next_node
                 end do
-            !    print*,'linha137'
             end do
-            !  print*,'L143 LJ'
         end do
-        ! print*, "x_1_LJ", x1
          !print*, 'Linha 143'
         ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
     end subroutine comp_F
@@ -803,8 +785,6 @@ module mod2
         type(lstr) :: LT
         !  real(dp),intent(inout) :: celula(:,:)
          ! IDS correspondem às celulas [N,S,E,W]
-        ! !print*, 'L SOMA', (ids(1) + ids(2) + ids(3) +ids(4)), 'ID', id
-        !!! ! print*, "L 464", id
         cont_db = 0
         cont_int = 0
         !  if (id == 0) read(*,*) 
@@ -1241,13 +1221,14 @@ module mod2
         ! print*, "L SOMA", (ids(1) + ids(2) + ids(3) +ids(4)), "id", id  
         ! print*, "enviando"
         if (np > 1) then !se for paralelo 
+            ! print*, 'L 862 >> id', id
             ! call MPI_SEND(BUF, COUNT, DATATYPE, DEST, TAG, COMM, IERROR)
             tag = 1
             if (ids(1) >= 0) call MPI_SEND(LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION, ids(1), tag,MPI_COMM_WORLD, ierr)
             if (ids(2) >= 0) call MPI_SEND(LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION, ids(2), tag,MPI_COMM_WORLD, ierr)   
             if (ids(3) >= 0) call MPI_SEND(LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION, ids(3), tag,MPI_COMM_WORLD, ierr)   
             if (ids(4) >= 0) call MPI_SEND(LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION, ids(4), tag,MPI_COMM_WORLD, ierr)   
-            if (sum(ids(5:8)) > -4) then
+            if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if 
             tag = 2 
@@ -1382,7 +1363,7 @@ module mod2
                         !! ! print*, "L 865 <<<", LT%lstrint_S
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id,i
+                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
                         ! print*, "S allocado F = ",ptr%p%F
                         !! ! print*, "L 869 <<<"
                         cont_db(j) = cont_db(j) - 6
@@ -1876,7 +1857,6 @@ program main
 
     implicit none
 !    Variáveis
-
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2)
     integer :: subx, suby, NMPT, j2
     integer, target :: k
@@ -2143,10 +2123,10 @@ program main
     ! só vai funcionar com serial e np par
     ! Descobir a melhor forma de dividir a malha
     
-    if (dimX > 3*dimY .and. np > 1) then
+    if (dimX > 3*dimY) then
         subx = 4
         suby = 1
-    else if (dimY > 3*dimX .and. np > 1) then
+    else if (dimY > 3*dimX) then
         subx = 1
         suby = 4
     else if (np > 1) then
@@ -2158,7 +2138,6 @@ program main
     end if  
 
     np = subx*suby
-    ! print*, "NP", np
     ids = [-1,-1,-1,-1,-1,-1,-1,-1]
 
     if (np > 2) then
