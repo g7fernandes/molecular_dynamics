@@ -150,10 +150,12 @@ module mod2
         integer, intent(in) :: domx(2),domy(2)
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         type(data_ptr) :: ptr
-        real(dp) :: kb = 1.38064852E-23,K, auxres(8), nump = 0, aux(2)
+        real(dp) :: kb = 1.38064852E-23,K, auxres(8), nump, aux(2)
         type(list_t), pointer :: node
         integer ( kind = 4 ) :: np, ierr, id
         real(dp), intent(in) :: t
+        
+        K = 0; nump = 0;
         
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
@@ -173,8 +175,9 @@ module mod2
         
         ! então o processo é paralelo, vamos juntar tudo 
         aux = [K, nump]
+        
         if (np > 1) then
-            call MPI_GATHER(aux2, 2, MPI_DOUBLE_PRECISION, Kres, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+            call MPI_GATHER(aux, 2, MPI_DOUBLE_PRECISION, auxres, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
             if (id == 0) then
                 K = auxres(1)+auxres(3)+auxres(5)+auxres(7)
                 nump = auxres(2)+auxres(4)+auxres(6)+auxres(8)
@@ -192,6 +195,7 @@ module mod2
         use mod1
         use data
         use mod0
+        use mpi
  
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         real(dp),intent(in) :: Td!energia cinética
@@ -204,6 +208,10 @@ module mod2
         real(dp), intent(in) :: tt
         !calcula temperatura atual
         T = (2/(3*kb))*comp_K(malha,domx,domy,propriedade,np,id,tt)
+
+        ! print*, "T =", T, "Td =", Td
+        ! if (id  == 0) read(*,*)    
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         T = sqrt(Td/T) ! aqui o T é o Beta
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
@@ -2123,10 +2131,10 @@ program main
     ! só vai funcionar com serial e np par
     ! Descobir a melhor forma de dividir a malha
     
-    if (dimX > 3*dimY) then
+    if (dimX > 3*dimY .and. np > 1) then
         subx = 4
         suby = 1
-    else if (dimY > 3*dimX) then
+    else if (dimY > 3*dimX .and. np > 1) then
         subx = 1
         suby = 4
     else if (np > 1) then
@@ -2209,6 +2217,7 @@ program main
     ! print*, 'ID ', id, 'iterv ', interv
     call clean_mesh(malha, mesh, domx, domy,id,.false.)
     ! print*, "bbb", id
+    call corr_K(malha,domx,domy,N,Td,propriedade, np,id,t)
     if (id == 0) then
         print*,'Press Return to continue'
        ! read(*,*)
