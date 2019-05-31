@@ -771,7 +771,7 @@ module mod2
     end subroutine comp_F
     
     ! atualiza posições
-    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,id, np)
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,id, np)
         use linkedlist
         use mod1
         use data
@@ -784,9 +784,9 @@ module mod2
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
-        real(dp), intent(in) :: dt, t
+        real(dp), intent(in) :: dt, t, dx_max
         type(data_ptr) :: ptr
-        real(dp) :: x(2),m
+        real(dp) :: x(2),m, dx(2)
         real(dp), intent(in) :: icell(:), jcell(:)
         integer ( kind = 4 ), intent(in) :: ids(8), id, np
         integer ( kind = 4 ) :: tag,cont_db(8),cont_int(8)
@@ -932,6 +932,7 @@ module mod2
                 
                 if (associated(node))  then
                     ptr = transfer(list_get(node), ptr)
+                    
                     ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
                     if (propriedade(ptr%p%grupo)%x_lockdelay > t) then
                         ptr%p%flag = .false. 
@@ -944,13 +945,21 @@ module mod2
                     ! print*, 'grupo =', ptr%p%grupo, 'massa=', m
                     ptr%p%flag = .false. 
                     ! ptr = transfer(list_get(node), ptr)
-                    ptr%p%x(1) = ptr%p%x(1) + dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
-                    ptr%p%x(2) = ptr%p%x(2) + dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
+                    dx(1) = dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
+                    dx(2) = dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
+                    if ((dx(1)**2 + dx(2)**2) >= dx_max) then
+                        print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n", i4)', dx(1), dx(2), ptr%p%n 
+                        print*, "F",ptr%p%F, "v", ptr%p%v
+                        dx = [0,0]
+                        read(*,*)
+                    end if
+                    ptr%p%x(1) = ptr%p%x(1) + dx(1) !dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
+                    ptr%p%x(2) = ptr%p%x(2) + dx(2) !dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
                     ! print*,'F_0  = ',ptr%p%F(1),ptr%p%F(2), "id", id
                     ! print '("x_0  = [",f10.3,", ",f10.3, "] ", "i, j =", i2, " ", i2, " n ",i2 )',ptr%p%x(1),ptr%p%x(2),i,j, ptr%p%n!"id", id, "n", ptr%p%n
                     ! Ordena as celulas
                     x = ptr%p%x
-          
+                    ! teste se a partícula pode pular celulas
                     ! Teste se escapou para a esquerda
                     if (x(1) <= jcell(j-1)) then
                         cell = [i,j-1]
@@ -1871,7 +1880,7 @@ program main
     real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,fric_term,vd(2)
-    real(dp) :: GField(2), temp_Td(3), dimX, dimY
+    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max
     integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
@@ -2001,29 +2010,32 @@ program main
             "change in position delay "//particle)       
     end do
     
-    
+    dx_max = 10*dimx !pra definir critério de estabilidade no uso de malha
     do i = 0,(Ntype-1)
-         write(particle,'(a,i0)') 'par_',i
-        
-         call CFG_get(my_cfg, particle//"%quantidade", quant)
-         call CFG_get(my_cfg, particle//"%nome", nome)
-         part_nomes(i+1)%str = nome
-         call CFG_get(my_cfg, particle//"%x", arquivo)
-         call CFG_get(my_cfg, particle//"%m", propriedade(i+1)%m)
-         call CFG_get(my_cfg, particle//"%epsilon", propriedade(i+1)%epsilon)
-         call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
-         call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
+        write(particle,'(a,i0)') 'par_',i
+    
+        call CFG_get(my_cfg, particle//"%quantidade", quant)
+        call CFG_get(my_cfg, particle//"%nome", nome)
+        part_nomes(i+1)%str = nome
+        call CFG_get(my_cfg, particle//"%x", arquivo)
+        call CFG_get(my_cfg, particle//"%m", propriedade(i+1)%m)
+        call CFG_get(my_cfg, particle//"%epsilon", propriedade(i+1)%epsilon)
+        call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
+        call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
         ! le o arquivo com posições
-         
-         open(20,file=arquivo,status='old')
-         do j = 1,quant
+        if (dx_max < propriedade(i+1)%sigma*rcut/2) then
+            dx_max = propriedade(i+1)%sigma*rcut/2
+        end if 
+
+        open(20,file=arquivo,status='old')
+        do j = 1,quant
             call CFG_get(my_cfg, particle//"%v", v(cont,:))    
             grupo(cont) = i+1
             read(20,*) x(cont,:) !,x(cont,2),x(cont,3)
             cont = cont+1
         end do
     end do
-  
+   dx_max = dx_max**2
    ! mostra informações lidas
     if (id == 0) then
         call CFG_write(my_cfg, "settings.txt") 
@@ -2043,13 +2055,6 @@ program main
     k = 0
     do i = 1,mesh(2)+2 !linha
         do j = 1,mesh(1)+2
-            ! allocate(ptr%p)
-            ! ptr%p%x = [0,0]
-            ! ptr%p%v = [0,0]
-            ! ptr%p%grupo = 0
-            ! ptr%p%F = [0,0]
-            ! ptr%p%n = k
-            ! ptr%p%flag = .true. ! flag auxiliar para uso  
             call list_init(malha(i,j)%list) !, DATA=transfer(ptr, list_data))
         end do
     end do
@@ -2217,7 +2222,7 @@ program main
     ! print*, 'ID ', id, 'iterv ', interv
     call clean_mesh(malha, mesh, domx, domy,id,.false.)
     ! print*, "bbb", id
-    call corr_K(malha,domx,domy,N,Td,propriedade, np,id,t)
+  
     if (id == 0) then
         print*,'Press Return to continue'
        ! read(*,*)
@@ -2242,7 +2247,7 @@ program main
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         ! print*, "L 1999", id
         !  if (id == 0) print*, "TEMPO", t, '<<<<<<<<<<', id, i
-        call comp_x(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,id, np) ! altera posição
+        call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,id, np) ! altera posição
         ! print*, "L 2002", id
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
@@ -2307,7 +2312,6 @@ program main
                 do ii = 0, N-1
 
                     x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3)]
-                    ! print*, 'x= ',[nxv(ii*5+2),nxv(ii*5+3)], 'i=',int(nxv(ii*5+1))
                     v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5)]
                 end do
                 
