@@ -1465,6 +1465,11 @@ module mod2
         use mod1
         use data
         use mod0
+        use, intrinsic :: ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
+        use, intrinsic :: iso_fortran_env, only: real32
+
+        real(real32) :: nan
+        nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
 
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp),intent(in) :: icell(:), jcell(:)
@@ -1502,8 +1507,8 @@ module mod2
                     do while (associated(node))
                         ! print*, "cell",i,j
                         ptr = transfer(list_get(node), ptr)
-                        ptr%p%x(2) = 0.0/0.0
-                        ptr%p%v(2) = 0.0/0.0
+                        ptr%p%x(2) = nan
+                        ptr%p%v(2) = nan
                         call list_remove(previous_node)
                         node => list_next(previous_node)                    
                     end do
@@ -1542,8 +1547,8 @@ module mod2
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
-                        ptr%p%x(2) = 0.0/0.0 
-                        ptr%p%v(2) = 0.0/0.0
+                        ptr%p%x(2) = nan
+                        ptr%p%v(2) = nan
                         call list_remove(previous_node)
                         node => list_next(previous_node)                    
                     end do
@@ -1579,8 +1584,8 @@ module mod2
                         !  print*,'N'!,x(ptr,2)
                         !read(*,*)
                         ptr = transfer(list_get(node), ptr)
-                        ptr%p%x(2) = 0.0/0.0 
-                        ptr%p%v(2) = 0.0/0.0
+                        ptr%p%x(2) = nan 
+                        ptr%p%v(2) = nan
                         call list_remove(previous_node)
                         !  previous_node => node
                         node => list_next(previous_node)                    
@@ -1623,8 +1628,8 @@ module mod2
                         !  print*,'N'!,x(ptr,2)
                         !read(*,*)
                         ptr = transfer(list_get(node), ptr)
-                        ptr%p%x(1) = 0.0/0.0 
-                        ptr%p%v(1) = 0.0/0.0
+                        ptr%p%x(1) = nan 
+                        ptr%p%v(1) = nan
                         call list_remove(previous_node)
                         !  previous_node => node
                         node => list_next(previous_node)                    
@@ -1909,6 +1914,7 @@ program main
     call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
 
     ! argumento para checar NAN no nancheck
+    call system('python verify_settings.py')
     call get_command_argument(1, arg)
     arg1 = trim(arg)
     
