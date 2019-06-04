@@ -139,7 +139,7 @@ module mod2
         
     end function comp_pot    
  
-    function comp_K(malha,domx,domy,propriedade,np,id,t) result(K)
+    function comp_Kglobal(malha,domx,domy,propriedade,np,id,t) result(K)
         use linkedlist
         use mod1
         use data
@@ -187,10 +187,10 @@ module mod2
         end if
         K = aux(1)/aux(2)
    
-    end function comp_K 
+    end function comp_Kglobal
         
-    !Corrige energia cinética/configura temepratura
-    subroutine corr_K(malha,domx,domy,N,Td,propriedade, np,id,tt)
+    !Corrige energia cinética/configura temepratura global
+    subroutine corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,tt)
         use linkedlist
         use mod1
         use data
@@ -199,20 +199,20 @@ module mod2
  
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         real(dp),intent(in) :: Td!energia cinética
-        real(dp) :: T,K,kb = 1.38064852E-23
-        integer, intent(in) :: N,domx(2),domy(2)
+        real(dp) :: T,K,kb = 1.38064852E-23, beta
+        integer, intent(in) :: domx(2),domy(2)
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         type(data_ptr) :: ptr
         type(list_t), pointer :: node
         integer ( kind = 4 ) :: np, id
         real(dp), intent(in) :: tt
         !calcula temperatura atual
-        T = (2/(3*kb))*comp_K(malha,domx,domy,propriedade,np,id,tt)
+        T = (2/(3*kb))*comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
 
         ! print*, "T =", T, "Td =", Td
         ! if (id  == 0) read(*,*)    
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-        T = sqrt(Td/T) ! aqui o T é o Beta
+        beta = sqrt(Td/T) ! aqui o T é o Beta
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
                ! print *, 'posição', i, ',', j
@@ -224,14 +224,117 @@ module mod2
                     ptr = transfer(list_get(node), ptr)
                     if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
                         !calcula a energia cinética atual
-                        ptr%p%v = T*ptr%p%v ! aqui o T é o beta 
+                        ptr%p%v = beta*ptr%p%v ! aqui o T é o beta 
                     end if
                     node => list_next(node)
                 end do
             end do
         end do        
-    end subroutine corr_K
+    end subroutine corr_Kglobal
     
+    function comp_K(malha,domx,domy,s_cells,propriedade,np,id,t) result(K)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        use mpi
+
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        integer, intent(in) :: domx(2),domy(2), s_cells(4) !selected cells
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(data_ptr) :: ptr
+        real(dp) :: kb = 1.38064852E-23,K, auxres(8), nump, aux(2)
+        type(list_t), pointer :: node
+        integer ( kind = 4 ) :: np, ierr, id
+        real(dp), intent(in) :: t
+        
+        K = 0; nump = 0;
+        
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+                if (i >= s_cells(1) .and. i <= s_cells(2) .and. j >= s_cells(3) .and. j <= s_cells(4)) then
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        !calcula a energia cinética atual
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            K = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + K
+                            nump = nump +1
+                        end if
+                        node => list_next(node)
+                    end do
+                end if
+            end do
+        end do        
+        
+        ! então o processo é paralelo, vamos juntar tudo 
+        aux = [K, nump]
+        
+        if (np > 1) then
+            call MPI_GATHER(aux, 2, MPI_DOUBLE_PRECISION, auxres, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+            if (id == 0) then
+                K = auxres(1)+auxres(3)+auxres(5)+auxres(7)
+                nump = auxres(2)+auxres(4)+auxres(6)+auxres(8)
+                auxres = [K,nump,K,nump,K,nump,K,nump]
+            end if
+            call MPI_SCATTER(auxres, 2, MPI_DOUBLE_PRECISION, aux, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+        end if
+        K = aux(1)/aux(2)
+   
+    end function comp_K 
+
+    subroutine corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,tt)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        use mpi
+ 
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        real(dp),intent(in) :: Td_hot, Td_cold!energia cinética
+        real(dp) :: T_hot, T_cold,K,kb = 1.38064852E-23, betac, betah
+        integer, intent(in) :: domx(2),domy(2), cold_cells(4), hot_cells(4)
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(data_ptr) :: ptr
+        type(list_t), pointer :: node
+        integer ( kind = 4 ) :: np, id
+        real(dp), intent(in) :: tt
+        !calcula temperatura atual
+
+        T_hot = (2/(3*kb))*comp_K(malha,domx,domy,hot_cells,propriedade,np,id,tt)
+        T_cold = (2/(3*kb))*comp_K(malha,domx,domy,cold_cells,propriedade,np,id,tt)
+        ! print*, "T =", T, "Td =", Td
+        ! if (id  == 0) read(*,*)    
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        betac = sqrt(Td_cold/T_cold) 
+        betah = sqrt(Td_hot/T_hot)
+        do i = domy(1),domy(2)
+            do j = domx(1),domx(2)
+                if (i >= cold_cells(1) .and. i <= cold_cells(2) .and. j >= cold_cells(3) .and. j <= cold_cells(4)) then
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            !calcula a energia cinética atual
+                            ptr%p%v = betac*ptr%p%v ! aqui o T é o beta 
+                        end if
+                        node => list_next(node)
+                    end do
+                else if (i >= hot_cells(1) .and. i <= hot_cells(2) .and. j >= hot_cells(3) .and. j <= hot_cells(4)) then
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            !calcula a energia cinética atual
+                            ptr%p%v = betah*ptr%p%v ! aqui o T é o beta 
+                        end if
+                        node => list_next(node)
+                    end do
+                end if
+            end do
+        end do        
+    end subroutine corr_K
+
     !força de ficção 
     function comp_fric(r,v,fric_term) result(f)
         use mod1
@@ -1469,8 +1572,6 @@ module mod2
         use, intrinsic :: iso_fortran_env, only: real32
 
         real(real32) :: nan
-        nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
-
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp),intent(in) :: icell(:), jcell(:)
         character(1), intent(in) :: north, south, east, west
@@ -1479,7 +1580,7 @@ module mod2
         integer, intent(in) :: mesh(:)
         type(data_ptr) :: ptr,ptrn
         integer, intent(in) :: domx(2), domy(2), id
-
+        nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
      !  ! print*, "L  1004",id
         if (domy(2) == mesh(2)+2) then 
            !! ! print*, "L 980", id
@@ -1684,7 +1785,7 @@ module mod2
         use data
         use mod0
 
-        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        type(container), allocatable,dimension(:,:) :: malha
         integer :: i,j, k = 0
         integer, intent(in) :: mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
@@ -1806,14 +1907,12 @@ module saida
         type(data_ptr) :: ptr
 
         aux1 = 1
-!         real(dp),intent(inout) :: celula(:,:)
+        ! real(dp),intent(inout) :: celula(:,:)
         
         do i = domy(1), domy(2)
             do j = domx(1), domx(2)
                ! print *, 'posição', i, ',', j
                 node => list_next(malha(i,j)%list)
-    !             print*, i,j
-    !             print*, 'is associated?', associated(node)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
                     nxv(aux1:aux1+4) = [ real(ptr%p%n, kind(0.d0)), ptr%p%x(1),ptr%p%x(2), &
@@ -1880,12 +1979,12 @@ program main
     implicit none
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2)
-    integer :: subx, suby, NMPT, j2
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4)
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,fric_term,vd(2)
-    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max
+    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold
     integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
@@ -1950,6 +2049,14 @@ program main
         "Thermostat")
     call CFG_add(my_cfg,"global%temp_Td",(/0.0_dp, 0.0_dp, 0.0_dp/), &
         "Thermostat iteractions time")
+    call CFG_add(my_cfg,"global%Td_hot",-1.0_dp, &
+        "Thermostat hot wall")
+    call CFG_add(my_cfg,"global%Td_cold",-1.0_dp, &
+        "Thermostat cold wall")
+    call CFG_add(my_cfg,"global%cold_cells",(/0, 0, 0, 0/), &
+        "Cold Cells")     
+    call CFG_add(my_cfg,"global%hot_cells",(/0, 0, 0, 0/), &
+        "Hot Cells")
     call CFG_add(my_cfg,"global%vd",(/0.0_dp, 0.0_dp/), &
         "Mean vd")            
     call CFG_add(my_cfg,"global%fric_term",1.0_dp, &
@@ -1972,6 +2079,10 @@ program main
     call CFG_get(my_cfg,"global%wall",wall)
     call CFG_get(my_cfg,"global%Td",Td)
     call CFG_get(my_cfg,"global%temp_Td",temp_Td)
+    call CFG_get(my_cfg,"global%cold_cells",cold_cells)
+    call CFG_get(my_cfg,"global%hot_cells",hot_cells)
+    call CFG_get(my_cfg,"global%Td_cold",Td_cold)
+    call CFG_get(my_cfg,"global%Td_hot",Td_hot)
     call CFG_get(my_cfg,"global%vd",vd)
     call CFG_get(my_cfg,"global%fric_term",fric_term)
     call CFG_get(my_cfg,"global%NMPT",NMPT)
@@ -1994,7 +2105,7 @@ program main
     aux2 = dimY/mesh(2)
     icell = (/((i*aux2),i = 0,mesh(2))/) ! direção Y
    
-    
+   
     do i = 0,(Ntype-1)     
         if (id == 0) write(*,'(a,i0)') 'par_',i
         write(particle,'(a,i0)') 'par_',i
@@ -2041,7 +2152,7 @@ program main
             cont = cont+1
         end do
     end do
-   dx_max = dx_max**2
+    dx_max = dx_max**2
    ! mostra informações lidas
     if (id == 0) then
         call CFG_write(my_cfg, "settings.txt") 
@@ -2072,13 +2183,12 @@ program main
     interv_Td = (/(printstep*i,i=0,nint( ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) )) /)
     interv_Td = interv_Td + nint(temp_Td(1)/dt)
     i = 0
-
+    
     if (Td == 0) then
         Td = (2/(3*N*kb))*sum(0.5*propriedade(ptr%p%grupo)%m*(v(:,1)**2+v(:,2)**2))
-    else if (Td < 0) then
+    else if (Td < 0 .and. (Td_hot*Td_hot) <= 0) then
         interv_Td = -1
     end if
-! print*, "2073"
     !Aloca as partículas nas celulas
     do k = 1,cont-1
         
@@ -2103,7 +2213,6 @@ program main
             end if 
         end do        
         !i e j contém agora a posição da partícula na matriz malha
-        
         allocate(ptr%p)
         ptr%p%x = x(k,:)
         ptr%p%v = v(k,:)
@@ -2112,20 +2221,20 @@ program main
         ptr%p%n = k !identidade da partícula importante para imprimir
         call list_insert(malha(i,j)%list, data=transfer(ptr, list_data)) 
     end do
-
     deallocate(grupo)
 
     ! adiciona às particulas velocidade inicial de acordo com distribuição maxwell boltzmann
     if (vd(1) /= 0 .and. vd(2) /= 0 .and. vd(1) /= 0) call MaxwellBoltzmann(malha,mesh,sqrt(vd))
 
+    ! adicionamos uma celula para corrigir o fato de estarmos usando fantasmas
+    cold_cells = cold_cells + 1
+    hot_cells = hot_cells + 1
     !-------------------------------------------------!
     ! ITERAÇÕES
     
     ! imprime condições iniciais
 
-
-    if (id == 0) then
-        
+    if (id == 0) then  
         j = 0 
         call system('mkdir temp') !pasta temporária para armazenar os resultados
         ! call linked2vec(malha,domx,domy,nxv,aux1)
@@ -2142,13 +2251,14 @@ program main
     ! só vai funcionar com serial e np par
     ! Descobir a melhor forma de dividir a malha
     
-    if (dimX > 3*dimY .and. np > 1) then
-        subx = 4
-        suby = 1
-    else if (dimY > 3*dimX .and. np > 1) then
-        subx = 1
-        suby = 4
-    else if (np > 1) then
+    ! if (dimX > 3*dimY .and. np > 1) then
+    !     subx = 4
+    !     suby = 1
+    ! else if (dimY > 3*dimX .and. np > 1) then
+    !     subx = 1
+    !     suby = 4
+    ! else if (np > 1) then
+    if (np > 1) then
         subx = 2
         suby = 2
     else 
@@ -2213,7 +2323,8 @@ program main
         domy = [1,mesh(2)+2]
     end if
 
-    print '("id = ",I2, "; domx = [",I3," ",I3, "]; domy = [",I3," ",I3, "]; icell = [",F10.3," ",F10.3,"] jcell = [",F10.3," ",F10.3,"]")' &
+    print '("id = ",I2, "; domx = [",I3," ",I3, "]; domy = [",I3," ",I3, "]; '& 
+    'icell = [",F10.3," ",F10.3,"] jcell = [",F10.3," ",F10.3,"]")' &
     , id, domx(1),domx(2), domy(1), domy(2), icell(domy(1)),  icell(domy(2)-1), jcell(domx(1)),  jcell(domx(2)-1)
     print '("id = ", I2, " ids = [", I2, " ", I2, " ", I2, " ", I2,"]")', id, ids(1), ids(2), ids(3), ids(4)
     ! libera a memória utilizada pelos processos não-raiz
@@ -2224,7 +2335,7 @@ program main
     ! aloca alguns vetores utilizados para o mpi_gatherv
     allocate(rcounts(np), displs(np))
 
-    ! print '("Mesh divided in ", I2, "x", I2, " subregions."  )', subx, suby
+    !print '("Mesh divided in ", I2, "x", I2, " subregions."  )', subx, suby
     ! print*, 'ID ', id, 'iterv ', interv
     call clean_mesh(malha, mesh, domx, domy,id,.false.)
     ! print*, "bbb", id
@@ -2242,6 +2353,7 @@ program main
     i = 0
     j = 1
     j2 = 1
+   
     do while (t_fim > t)
         ! print*, "L 1990"
         call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t)  !altera Força
@@ -2272,7 +2384,12 @@ program main
         cont2 = cont2+1
 
         if (i == interv_Td(j2)) then
-            call corr_K(malha,domx,domy,N,Td,propriedade, np,id,t)
+            if (Td > 0) then
+                call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
+            end if
+            if (Td_hot > 0 .or. Td_cold > 0) then
+                call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
+            end if
             j2 = j2 + 1
         end if 
         
@@ -2302,8 +2419,9 @@ program main
                     ! print*, "displs", displs
                 end if
                 ! print*,'E_tot0 = ',(comp_pot(mesh,malha,propriedade,rcut) +comp_K(malha,mesh,propriedade))
-                ! MPI_GATHERV    (sbuf,   scount,        stype,       rbuf, rcounts,  displs,       rtype,       root,  comm,         ierr)
-                call MPI_GATHERV(nxv_send, aux1, MPI_DOUBLE_PRECISION, nxv, rcounts, displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+                ! MPI_GATHERV    (sbuf,   scount,  stype, rbuf, rcounts,  displs,   rtype,  root,  comm,  ierr)
+                call MPI_GATHERV(nxv_send, aux1, MPI_DOUBLE_PRECISION, nxv, rcounts, &
+                 displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                 
                 ! o processo raiz imprime os resultados
                 ! print*, "id", id, "nxv_send:", nxv_send(1:aux1)
@@ -2350,7 +2468,7 @@ program main
         open(unit=22,file='settings.txt',status="old", position="append", action="write")
         write(22,*) "Execution time = ",(finish-start)," seconds."
         close(22)
-        !call system('python csv2vtk_particles.py')
+        call system('python csv2vtk_particles.py')
     end if
     
     ! print*, 'L 1808'
