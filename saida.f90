@@ -58,7 +58,7 @@ module saida
         
     end subroutine vec2csv 
     
-    subroutine linked2vec(malha,domx,domy,nxv,aux1)
+    subroutine linked2vec(malha,mesh,domx,domy,nxv,aux1)
        
         use linkedlist
         use mod1
@@ -67,7 +67,7 @@ module saida
         
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j,aux1
-        integer, intent(in) :: domx(2), domy(2)
+        integer, intent(in) :: domx(2), domy(2), mesh(2)
         type(list_t), pointer :: node
         real(dp), intent(out) :: nxv(:)
         type(data_ptr) :: ptr
@@ -77,19 +77,19 @@ module saida
         
         do i = domy(1), domy(2)
             do j = domx(1), domx(2)
-               ! print *, 'posição', i, ',', j
-                node => list_next(malha(i,j)%list)
-                do while (associated(node))
-                    ptr = transfer(list_get(node), ptr)
-                    nxv(aux1:aux1+4) = [ real(ptr%p%n, kind(0.d0)), ptr%p%x(1),ptr%p%x(2), &
-                    ptr%p%v(1), ptr%p%v(2)]
-                    aux1 = aux1 + 5
-                    node => list_next(node)
-                end do
+                if(i > 1 .and. i < mesh(2)+2 .and. j > 1 .and. j < mesh(1)+2) then                  
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        nxv(aux1:aux1+4) = [ real(ptr%p%n, kind(0.d0)), ptr%p%x(1),ptr%p%x(2), &
+                        ptr%p%v(1), ptr%p%v(2)]
+                        aux1 = aux1 + 5
+                        node => list_next(node)
+                    end do
+                end if
             end do
         end do
         aux1 = aux1 -1
-        
     end subroutine linked2vec    
     
     subroutine nancheck(malha,mesh,t) 

@@ -847,7 +847,7 @@ module fisica
 
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD
+        integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, dx_max
@@ -938,7 +938,7 @@ module fisica
                 end do 
             end do
         else if (domx(2) == mesh(1)+2) then 
-            j = domx(2)+2
+            j = domx(2)
             do i = domy(1),domy(2)
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list) 
@@ -965,7 +965,7 @@ module fisica
                     ! node => list_next(node)
                 end do
             end do
-        else if (domx(1) > 1) then
+        else if (domx(1) == 1) then
             j = domx(1)
             do i = domy(1),domy(2)
                 node => list_next(malha(i,j)%list)
@@ -998,9 +998,17 @@ module fisica
         ! print*, "cont_int", cont_int
         ! if (id == 0) read(*,*) 
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-        
-        do i = domy(1),domy(2)
-            do j = domx(1),domx(2)
+        dx1 = domx(1)
+        dx2 = domx(2)
+        dy1 = domy(1)
+        dy2 = domy(2)
+        if (dy1 == 1) dy1 = 2
+        if (dx1 == 1) dx1 = 2
+        if (dy2 == mesh(2)+2) dy2 = mesh(2)+1
+        if (dx2 == mesh(1)+2) dx2 = mesh(1)+1
+
+        do i = dy1, dy2
+            do j = dx1,dx2
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
                 ! print*, i,j, "id", id
@@ -1560,6 +1568,7 @@ module fisica
         south = wall(2:2)
         east = wall(3:3)
         west = wall(4:4)
+        
         if (domy(2) == mesh(2)+2) then 
            !! ! print*, "L 980", id
             if (north == 'e') then !elastic
@@ -1604,15 +1613,17 @@ module fisica
                     do j = domx(1),domx(2)
                         previous_node => malha(i,j)%list
                         node => list_next(malha(i,j)%list)
-                
                         do while (associated(node))
-                            ! print*, "cell",i,j, "north", id
                             ptr = transfer(list_get(node), ptr)
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2) 
                                 call list_change(previous_node,malha(2,j)%list)
-                                node => list_next(previous_node)    
+                                node => list_next(previous_node)  
+                            else 
+                                previous_node => node 
+                                node => list_next(node)
                             end if 
+                            
                         end do
                     end do
                     i = mesh(2) + 1 ! copiada pra celula fantasma do lado oposto 
@@ -1622,15 +1633,17 @@ module fisica
                         do while (associated(node))
                             ! print*, "cell",i,j, "north", id
                             ptr = transfer(list_get(node), ptr)
-                            ptr%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2)
+                            allocate(ptrn%p)
+                            ptrn%p = ptr%p 
+                            ptrn%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2)
                             !precisamos de um marcador para particula não voltar  
-                            ptr%p%flag = .true. 
-                            call list_insert(malha(1,j)%list, data=transfer(ptr,list_data))
-                            node => list_next(previous_node)    
+                            ptrn%p%flag = .true. 
+                            call list_insert(malha(1,j)%list, data=transfer(ptrn,list_data))
+                            node => list_next(node)    
                         end do
                     end do                   
                 end if
-                print*, "oi"
+                ! print*, "oi"
             end if
         end if
         
@@ -1672,13 +1685,18 @@ module fisica
                         node => list_next(malha(i,j)%list)
                 
                         do while (associated(node))
+                            ! print*, "BB"
                             ! print*, "cell",i,j, "north", id
                             ptr = transfer(list_get(node), ptr)
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2) 
+                                print*,ptr%p%n 
                                 call list_change(previous_node,malha(mesh(2)+1,j)%list)
+                                node => list_next(previous_node)    
+                            else 
+                                previous_node => node 
+                                node => list_next(node)
                             end if 
-                            node => list_next(previous_node)    
                         end do
                     end do
                     i = 2 ! copiada pra celula fantasma do lado oposto 
@@ -1688,11 +1706,13 @@ module fisica
                         do while (associated(node))
                             ! print*, "cell",i,j, "north", id
                             ptr = transfer(list_get(node), ptr)
-                            ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2)
+                            allocate(ptrn%p)
+                            ptrn%p = ptr%p 
+                            ptrn%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2)
                             !precisamos de um marcador para particula não voltar  
-                            ptr%p%flag = .true. 
-                            call list_insert(malha(mesh(2)+2,j)%list, data=transfer(ptr,list_data))
-                            node => list_next(previous_node)    
+                            ptrn%p%flag = .true. 
+                            call list_insert(malha(mesh(2)+2,j)%list, data=transfer(ptrn,list_data))
+                            node => list_next(node)    
                         end do
                     end do                   
                 end if
@@ -1745,8 +1765,11 @@ module fisica
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
                                 call list_change(previous_node,malha(i,mesh(1)+1)%list)
+                                node => list_next(previous_node)    
+                            else 
+                                previous_node => node 
+                                node => list_next(node)
                             end if
-                            node => list_next(previous_node)    
                         end do
                     end do  
 
@@ -1758,26 +1781,24 @@ module fisica
                             ! print*, "cell",i,j, "west", id
                             ptr = transfer(list_get(node), ptr)
                             ! print*, "n", ptr%p%x 
-                            ptr%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
+                            allocate(ptrn%p)
+                            ptrn%p = ptr%p 
+                            ptrn%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
                             ptr%p%flag = .true. 
                             call list_insert(malha(i,mesh(1)+2)%list, data=transfer(ptr,list_data))
-                            node => list_next(previous_node)    
+                            node => list_next(node)    
                         end do
                     end do  
 
                 end if
-                print*, "oi"
             end if
         end if
         if (domx(2) == mesh(1) +2) then
             if (east == 'e') then
                 j = mesh(1)+2
                 do i = domy(1), domy(2)
-                    ! print*, "A"
                     previous_node => malha(i,j)%list
-                    ! print*, "B"
                     node => list_next(malha(i,j)%list)
-                    ! print*, "C"
                     do while (associated(node))
                         ! print*, "cell",i,j, "east", id
                         ptr = transfer(list_get(node), ptr)
@@ -1789,10 +1810,8 @@ module fisica
                 end do
             else if (east == 'o') then
                 j = mesh(1)+2
-                !  print*,'j = ',j
                 do i = domy(1), domy(2)
                     previous_node => malha(i,j)%list
-                    
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -1815,11 +1834,13 @@ module fisica
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
                                 call list_change(previous_node,malha(i,2)%list)
+                                node => list_next(previous_node)    
+                            else 
+                                previous_node => node 
+                                node => list_next(node)
                             end if
-                            node => list_next(previous_node)    
                         end do
                     end do  
-
                     j = mesh(1)+1
                     do i = domy(1), domy(2)
                         previous_node => malha(i,j)%list
@@ -1828,14 +1849,15 @@ module fisica
                             ! print*, "cell",i,j, "west", id
                             ptr = transfer(list_get(node), ptr)
                             ! print*, "n", ptr%p%x 
-                            ptr%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
-                            ptr%p%flag = .true. 
+                            allocate(ptrn%p)
+                            ptrn%p = ptr%p 
+                            ptrn%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
+                            ptrn%p%flag = .true. 
                             call list_insert(malha(i,1)%list, data=transfer(ptr,list_data))
-                            node => list_next(previous_node)    
+                            node => list_next(node)    
                         end do
                     end do  
                 end if
-                print*, "oi"
             end if
         end if
         ! print*,"linha 1146 ok"
@@ -2320,7 +2342,6 @@ program main
     do while (t_fim > t)
         ! print*, "L 1990"
         call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t)  !altera Força
-        
         ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
         ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
         ! que o processo vai cuidar (subdivisões)
@@ -2328,7 +2349,7 @@ program main
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         ! print*, "L 1999", id
         !  if (id == 0) print*, "TEMPO", t, '<<<<<<<<<<', id, i
-        call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,id, np) ! altera posição
+        call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
         ! print*, "L 2002", id
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
@@ -2363,7 +2384,7 @@ program main
             ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
             ! print*, 'MANDANDO PRINTAR', id, i
             
-            call linked2vec(malha,domx,domy,nxv_send,aux1)
+            call linked2vec(malha,mesh,domx,domy,nxv_send,aux1)
             ! ! ! print*, "L nxv_send", nxv_send  
             !! print*, "LINKED 2 VEC, id", id, "aux1", aux1
             if (np > 1) then ! paralelo
