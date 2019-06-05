@@ -1,41 +1,5 @@
-
-module mod0
-    use mod1
-    use linkedlist
-        type :: container
-            type(list_t), pointer :: list => null()
-        end type container
-
-        ! Propriedades de cada grupo de partícula (indicado pelo índice do vetor com este tipo)
-        ! nos permite mais fases e economiza espaço
-        type :: prop_grupo
-            real(dp) :: m ! mass
-            real(dp) :: epsilon 
-            real(dp) :: sigma 
-            real(dp)  :: x_lockdelay    ! só vai poder mudar de posição a partir de t = x_lockdelay
-        end type prop_grupo
-
-            ! LSTR  lista de transferência pro MPI
-        type :: lstr
-            real(dp),allocatable :: lstrdb_N(:)
-            real(dp),allocatable :: lstrdb_S(:)
-            real(dp),allocatable :: lstrdb_E(:)
-            real(dp),allocatable :: lstrdb_W(:)
-            real(dp),allocatable :: lstrdb_D(:) ! Diagonal. Para transferir nas direções NE, NS, SE, SW no encontro de 4 processos
-
-            integer,allocatable :: lstrint_N(:)
-            integer,allocatable :: lstrint_S(:)
-            integer,allocatable :: lstrint_E(:)
-            integer,allocatable :: lstrint_W(:)
-            integer,allocatable :: lstrint_D(:)
-        end type lstr
-end module mod0
-
-module mod2
-    !use mod0
-    !use data
+module fisica
     contains
-    
     !Calcula velocidades distribuidas de acordo com MaxwellBolzmann
     ! factor = sqrt(<vd²>) = sqrt(kb*T/m) por componente
     subroutine MaxwellBoltzmann(malha,mesh,factor)
@@ -363,8 +327,7 @@ module mod2
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
-        
-        
+ 
         !Lennard Jones
         fR = [0,0]
         do i = domy(1),domy(2) ! i é linha
@@ -874,7 +837,7 @@ module mod2
     end subroutine comp_F
     
     ! atualiza posições
-    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,id, np)
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np)
         use linkedlist
         use mod1
         use data
@@ -888,6 +851,7 @@ module mod2
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, dx_max
+        character(4), intent(in) :: wall
         type(data_ptr) :: ptr
         real(dp) :: x(2),m, dx(2)
         real(dp), intent(in) :: icell(:), jcell(:)
@@ -914,16 +878,21 @@ module mod2
                     node => list_next(previous_node)
                     ! node => list_next(node)
                 end do
-                ! node => list_next(malha(i,j)%list) 
-                ! if (associated(node)) then
-                !     ! print*, "LIMPANDO A", i,j
-                !     ! ! print*, "L AA", ptr%p%n
-                !     ! print*, "AA", id
-                !     call list_free(malha(i,j)%list)
-                !     ! print*, "AAA", associated(node)
-                !     call list_init(malha(i,j)%list)
-                ! end if
             end do
+        else if (domy(1) == 1) then !esvazia celulas fantasma
+            i = domy(1)
+            do j = domx(1),domx(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list) 
+                ! print*, associated(node), "A", id
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do
+            end do            
         end if 
         if (domy(2) < mesh(2)+2) then
             i = domy(2)+1
@@ -938,14 +907,20 @@ module mod2
                     node => list_next(previous_node)
                     ! node => list_next(node)
                 end do 
-                ! node => list_next(malha(i,j)%list) 
-                ! if (associated(node)) then
-                !     ! print*, "LIMPANDO B", i,j
-                !     ! print*, "BB", id
-                !     call list_free(malha(i,j)%list)
-                !     ! print*, "BBB", associated(node)
-                !     call list_init(malha(i,j)%list)
-                ! end if
+            end do
+        else if  (domy(2) == mesh(2)+2) then 
+            i = domy(2)
+            do j = domx(1),domx(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! print*, associated(node), "B", id
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do 
             end do
         end if 
         if (domx(2) < mesh(1)+2) then
@@ -961,14 +936,20 @@ module mod2
                     node => list_next(previous_node)
                     ! node => list_next(node)
                 end do 
-                ! node => list_next(malha(i,j)%list)
-                ! if (associated(node)) then
-                !     ! print*, "LIMPANDO C", i,j
-                !     ! print*, "DD", id
-                !     call list_free(malha(i,j)%list)
-                !     ! print*, "DDD", associated(node)
-                !     call list_init(malha(i,j)%list)
-                ! end if
+            end do
+        else if (domx(2) == mesh(1)+2) then 
+            j = domx(2)+2
+            do i = domy(1),domy(2)
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list) 
+                ! print*, associated(node), "D", id
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do 
             end do
         end if  
         if (domx(1) > 1) then
@@ -983,16 +964,19 @@ module mod2
                     node => list_next(previous_node)
                     ! node => list_next(node)
                 end do
-                ! node => list_next(malha(i,j)%list)
-                ! if (associated(node)) then
-                !     ! print*, "LIMPANDO D", i,j
-                !     ! print*, "CC", id
-                !     ! ptr = transfer(list_get(node), ptr)
-                !     ! print*, ptr%p%n
-                !     call list_free(malha(i,j)%list)
-                !     ! print*, "CCC", associated(node)
-                !     call list_init(malha(i,j)%list)
-                ! end if
+            end do
+        else if (domx(1) > 1) then
+            j = domx(1)
+            do i = domy(1),domy(2)
+                node => list_next(malha(i,j)%list)
+                previous_node => malha(i,j)%list
+                do while (associated(node)) 
+                    ptr = transfer(list_get(node), ptr)
+                    deallocate(ptr%p)
+                    call list_remove(previous_node)
+                    node => list_next(previous_node)
+                    ! node => list_next(node)
+                end do
             end do
         end if 
         ! PARA 4 processos. Limpa o que está na diagonal adjacente
@@ -1010,17 +994,6 @@ module mod2
                 node => list_next(previous_node)
                 ! node => list_next(node)
             end do
-            ! node => list_next(malha(i,j)%list)
-            ! print*, "Limpando malha", i,j, "ID", id
-            ! if (associated(node)) then
-            !     ! print*, "LIMPANDO E", i,j
-            !     ! print*, "EE", id
-            !     ! ptr = transfer(list_get(node), ptr)
-            !     ! print*, ptr%p%n
-            !     call list_free(malha(i,j)%list)
-            !     ! print*, "EEE", associated(node)
-            !     call list_init(malha(i,j)%list)
-            ! end if
         end if 
         ! print*, "cont_int", cont_int
         ! if (id == 0) read(*,*) 
@@ -1563,7 +1536,7 @@ module mod2
         end do
     end subroutine comp_v
     
-    subroutine walls(icell,jcell,mesh,malha,domx,domy,north,south,east,west,id)
+    subroutine walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id)
         use linkedlist
         use mod1
         use data
@@ -1574,14 +1547,19 @@ module mod2
         real(real32) :: nan
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp),intent(in) :: icell(:), jcell(:)
-        character(1), intent(in) :: north, south, east, west
+        character(1) :: north, south, east, west
+        character(4), intent(in) :: wall
         type(list_t), pointer :: node, previous_node
         integer :: i,j,cell(2)
-        integer, intent(in) :: mesh(:)
+        integer, intent(in) :: mesh(:), np, subx, suby
         type(data_ptr) :: ptr,ptrn
         integer, intent(in) :: domx(2), domy(2), id
         nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
-     !  ! print*, "L  1004",id
+
+        north = wall(1:1)        
+        south = wall(2:2)
+        east = wall(3:3)
+        west = wall(4:4)
         if (domy(2) == mesh(2)+2) then 
            !! ! print*, "L 980", id
             if (north == 'e') then !elastic
@@ -1591,13 +1569,12 @@ module mod2
                     node => list_next(malha(i,j)%list)
                     
                     do while (associated(node))
-                        ! print*, "cell",i,j, "north"
+                        ! print*, "cell",i,j, "north", id
                         ptr = transfer(list_get(node), ptr)
                         ptr%p%x(2) = 2*icell(mesh(2)+1) - ptr%p%x(2) 
                         ptr%p%v(2) = -ptr%p%v(2)
                         call list_change(previous_node,malha(i-1,j)%list)
                         node => list_next(previous_node)    
-                        ! print*, 'part=',ptr%p%n, "cell",i,j                
                     end do
                 end do
             else if (north == 'o') then
@@ -1615,7 +1592,45 @@ module mod2
                     end do
                 end do           
             else !periodic 
-                print*, oi
+                ! Para o caso periódico, as partículas que estão nas celulas fantasmas
+                ! vão ter que ir para o outro lado da região de cálculo para a região não- 
+                ! fantasma. Mas não deverá ser removida de região fantasma já que elas in-
+                ! fluenciam a região ao lado. Isto deverá durar uma iteração e serão apagadas
+                ! da região fantasma no comp_x. 
+                ! Para o caso paralelo quando mudar de domínio deverão ser transferidas como
+                ! no comp_x
+                if (suby == 1) then ! caso não paralelo ou o processo calcula ao longo de todo y
+                    i = mesh(2) +2
+                    do j = domx(1),domx(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "north", id
+                            ptr = transfer(list_get(node), ptr)
+                            if (.not. ptr%p%flag) then 
+                                ptr%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2) 
+                                call list_change(previous_node,malha(2,j)%list)
+                                node => list_next(previous_node)    
+                            end if 
+                        end do
+                    end do
+                    i = mesh(2) + 1 ! copiada pra celula fantasma do lado oposto 
+                    do j = domx(1),domx(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "north", id
+                            ptr = transfer(list_get(node), ptr)
+                            ptr%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2)
+                            !precisamos de um marcador para particula não voltar  
+                            ptr%p%flag = .true. 
+                            call list_insert(malha(1,j)%list, data=transfer(ptr,list_data))
+                            node => list_next(previous_node)    
+                        end do
+                    end do                   
+                end if
+                print*, "oi"
             end if
         end if
         
@@ -1630,20 +1645,15 @@ module mod2
                     do while (associated(node))
                         ! print*, "cell",i,j, "south", id
                         ptr = transfer(list_get(node), ptr)
-                        ! print*, "cell",i,j
-                        ! print*, 'part=',ptr%p%n
-
                         ptr%p%x(2) = -ptr%p%x(2)  
                         ptr%p%v(2) = -ptr%p%v(2)
                         call list_change(previous_node,malha(2,j)%list)
-
                         node => list_next(previous_node)                    
                     end do
                 end do
             else if (south == 'o') then
                 i = 1
                 do j = domx(1), domx(2)
-                    
                     previous_node => malha(i,j)%list              
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
@@ -1655,7 +1665,37 @@ module mod2
                     end do
                 end do           
             else !periodic 
-                print*, oi
+                if (suby == 1) then ! caso não paralelo ou o processo calcula ao longo de todo y
+                    i = 1
+                    do j = domx(1),domx(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "north", id
+                            ptr = transfer(list_get(node), ptr)
+                            if (.not. ptr%p%flag) then 
+                                ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2) 
+                                call list_change(previous_node,malha(mesh(2)+1,j)%list)
+                            end if 
+                            node => list_next(previous_node)    
+                        end do
+                    end do
+                    i = 2 ! copiada pra celula fantasma do lado oposto 
+                    do j = domx(1),domx(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "north", id
+                            ptr = transfer(list_get(node), ptr)
+                            ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2)
+                            !precisamos de um marcador para particula não voltar  
+                            ptr%p%flag = .true. 
+                            call list_insert(malha(mesh(2)+2,j)%list, data=transfer(ptr,list_data))
+                            node => list_next(previous_node)    
+                        end do
+                    end do                   
+                end if
             end if 
         end if 
        !! ! print*, "L 1057", id
@@ -1666,6 +1706,7 @@ module mod2
                     previous_node => malha(i,j)%list
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
+                        ! print*, "cell",i,j, "west", id
                         ptr = transfer(list_get(node), ptr)
                         ! print*, "n", ptr%p%x 
                         ptr%p%x(1) = -ptr%p%x(1)
@@ -1688,12 +1729,44 @@ module mod2
                         ptr%p%x(2) = nan 
                         ptr%p%v(2) = nan
                         call list_remove(previous_node)
-                        !  previous_node => node
                         node => list_next(previous_node)                    
                     end do
                 end do           
             else !periodic 
-                print*, oi
+                if (subx == 1) then
+                    j = 1
+                    do i = domy(1), domy(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "west", id
+                            ptr = transfer(list_get(node), ptr)
+                            ! print*, "n", ptr%p%x 
+                            if (.not. ptr%p%flag) then 
+                                ptr%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
+                                call list_change(previous_node,malha(i,mesh(1)+1)%list)
+                            end if
+                            node => list_next(previous_node)    
+                        end do
+                    end do  
+
+                    j = 2
+                    do i = domy(1), domy(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "west", id
+                            ptr = transfer(list_get(node), ptr)
+                            ! print*, "n", ptr%p%x 
+                            ptr%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
+                            ptr%p%flag = .true. 
+                            call list_insert(malha(i,mesh(1)+2)%list, data=transfer(ptr,list_data))
+                            node => list_next(previous_node)    
+                        end do
+                    end do  
+
+                end if
+                print*, "oi"
             end if
         end if
         if (domx(2) == mesh(1) +2) then
@@ -1706,14 +1779,11 @@ module mod2
                     node => list_next(malha(i,j)%list)
                     ! print*, "C"
                     do while (associated(node))
-                        ! print*, "cell",i,j, "east"
+                        ! print*, "cell",i,j, "east", id
                         ptr = transfer(list_get(node), ptr)
-                        ! print*, "E"
                         ptr%p%x(1) = 2*jcell(mesh(1)+1) - ptr%p%x(1) 
                         ptr%p%v(1) = -ptr%p%v(1)
-                        ! print*, "F"
                         call list_change(previous_node,malha(i,j-1)%list)
-                        ! print*, "G"
                         node => list_next(previous_node)   
                     end do
                 end do
@@ -1724,27 +1794,55 @@ module mod2
                     previous_node => malha(i,j)%list
                     
                     node => list_next(malha(i,j)%list)
-                     !print*, 'Linha 236', associated(previous_node)
                     do while (associated(node))
-                        !  print*,'N'!,x(ptr,2)
-                        !read(*,*)
                         ptr = transfer(list_get(node), ptr)
                         ptr%p%x(1) = nan 
                         ptr%p%v(1) = nan
                         call list_remove(previous_node)
-                        !  previous_node => node
                         node => list_next(previous_node)                    
                     end do
                 end do           
             else !periodic 
-                print*, oi
+                if (subx == 1) then
+                    j = mesh(1)+2
+                    do i = domy(1), domy(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "west", id
+                            ptr = transfer(list_get(node), ptr)
+                            ! print*, "n", ptr%p%x 
+                            if (.not. ptr%p%flag) then 
+                                ptr%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
+                                call list_change(previous_node,malha(i,2)%list)
+                            end if
+                            node => list_next(previous_node)    
+                        end do
+                    end do  
+
+                    j = mesh(1)+1
+                    do i = domy(1), domy(2)
+                        previous_node => malha(i,j)%list
+                        node => list_next(malha(i,j)%list)
+                        do while (associated(node))
+                            ! print*, "cell",i,j, "west", id
+                            ptr = transfer(list_get(node), ptr)
+                            ! print*, "n", ptr%p%x 
+                            ptr%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
+                            ptr%p%flag = .true. 
+                            call list_insert(malha(i,1)%list, data=transfer(ptr,list_data))
+                            node => list_next(previous_node)    
+                        end do
+                    end do  
+                end if
+                print*, "oi"
             end if
         end if
         ! print*,"linha 1146 ok"
         ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
      !    !read(*,*)
     end subroutine walls
-!     
+    
     subroutine distribuicao_inicial(malha,N,mesh)
         use linkedlist
         use mod1
@@ -1828,141 +1926,8 @@ module mod2
 
     end subroutine clean_mesh
 
-end module mod2
+end module fisica
 
-
-! Este módulo escreve csv
-module saida
-    contains
-    subroutine vec2csv(v,n,d,prop,step,t,nimpre,start)
-        use mod1
-        !N é o número de partículas e d é a dimensão da propriedade
-        ! cada linha é uma partícula 
-        implicit none
-        integer, intent(in) :: n,d
-        real(dp), intent(in) :: v(n,d), t, start
-        integer :: i,step, nimpre
-        character(*) :: prop
-        character(4) :: extensao = '.csv', passo
-        real(dp) :: time
-        real(dp), save :: timep, etc, dtimepp
-
-        write(passo,'(i0)') step
-        open(10,file='temp/'//prop//extensao//'.'//trim(passo),status="replace")
-        if (d == 1) then
-            do i = 1,n
-                write(10,*) v(i,1)
-            end do
-        else if (d == 2) then
-            do i = 1,n
-                write(10,*) v(i,1),',',v(i,2)
-            end do
-        else
-            do i = 1,n
-                write(10,*) v(i,1),',',v(i,2),',',v(i,3)
-            end do
-        end if
-        close(10)
-
-        if (prop == "position") then 
-            if (step == 0) timep = 0
-            call cpu_time(time)    
-            if (step == 1) then 
-                etc = ((time - start)/step+ (time-timep))*0.5*nimpre - (time - start)
-                dtimepp = (time-timep)
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
-            else if (step > 1) then
-                etc = ((time - start)*2/step + ((time-timep)*4 + dtimepp*4))*(nimpre-step)/10 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
-                dtimepp = (time-timep)
-            else 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
-            end if
-
-            timep = time 
-        else 
-            if (step > 0) then 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
-            else 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
-            end if
-            timep = time
-        end if     
-        ! print*, 'Salvo arquivo ',prop//extensao//'.'//trim(passo), "t =", t, "ETC: ", etc 
-        
-    end subroutine vec2csv 
-    
-    subroutine linked2vec(malha,domx,domy,nxv,aux1)
-       
-        use linkedlist
-        use mod1
-        use data
-        use mod0
-        
-        type(container), allocatable,dimension(:,:),intent(in) :: malha
-        integer :: i,j,aux1
-        integer, intent(in) :: domx(2), domy(2)
-        type(list_t), pointer :: node
-        real(dp), intent(out) :: nxv(:)
-        type(data_ptr) :: ptr
-
-        aux1 = 1
-        ! real(dp),intent(inout) :: celula(:,:)
-        
-        do i = domy(1), domy(2)
-            do j = domx(1), domx(2)
-               ! print *, 'posição', i, ',', j
-                node => list_next(malha(i,j)%list)
-                do while (associated(node))
-                    ptr = transfer(list_get(node), ptr)
-                    nxv(aux1:aux1+4) = [ real(ptr%p%n, kind(0.d0)), ptr%p%x(1),ptr%p%x(2), &
-                    ptr%p%v(1), ptr%p%v(2)]
-                    aux1 = aux1 + 5
-                    node => list_next(node)
-                end do
-            end do
-        end do
-        aux1 = aux1 -1
-        
-    end subroutine linked2vec    
-    
-    subroutine nancheck(malha,mesh,t) 
-        use linkedlist
-        use mod1
-        use data
-        use mod0
-
-        real(dp), intent(in) :: t
-        integer :: i 
-        integer, intent(in) :: mesh(:)
-        type(container), allocatable,dimension(:,:),intent(in) :: malha
-        type(data_ptr) :: ptr
-        type(list_t), pointer :: node
-        do i = 1,mesh(2)+2 
-            do j = 1,mesh(1)+2
-                node => list_next(malha(i,j)%list)
-                do while (associated(node))
-                    ptr = transfer(list_get(node), ptr)
-                    !calcula a energia cinética atual
-                    node => list_next(node)
-                    if (isnan(ptr%p%x(1))) then
-                        print*, 'NaN em part',ptr%p%n,'x, t=',t
-                    end if
-                    if (isnan(ptr%p%x(2))) then
-                        print*, 'NaN em part',ptr%p%n,'y, t=',t
-                    end if
-                end do
-            end do
-        end do        
-
-
-
-        do i = 1,N
-
-        end do
-    end subroutine nancheck
-    
-end module saida
 
 program main
     use mod1
@@ -1972,7 +1937,7 @@ program main
     use matprint
     use saida
     use m_config
-    use mod2
+    use fisica
     use randnormal
     use mpi
 
@@ -2191,9 +2156,7 @@ program main
     end if
     !Aloca as partículas nas celulas
     do k = 1,cont-1
-        
         laux = .true.
-
         j = 2
         do while (laux)
             if (x(k,1) > jcell(j)) then
@@ -2251,14 +2214,14 @@ program main
     ! só vai funcionar com serial e np par
     ! Descobir a melhor forma de dividir a malha
     
-    ! if (dimX > 3*dimY .and. np > 1) then
-    !     subx = 4
-    !     suby = 1
-    ! else if (dimY > 3*dimX .and. np > 1) then
-    !     subx = 1
-    !     suby = 4
-    ! else if (np > 1) then
-    if (np > 1) then
+    if (dimX > 3*dimY .and. np > 1) then
+        subx = 4
+        suby = 1
+    else if (dimY > 3*dimX .and. np > 1) then
+        subx = 1
+        suby = 4
+    else if (np > 1) then
+    !if (np > 1) then
         subx = 2
         suby = 2
     else 
@@ -2312,8 +2275,8 @@ program main
                             ids = [-1, 2, -1, -1, -1, -1, -1, -1]
                         end if
                     end if 
-                    domx = [i*int((mesh(1)+2)/subx)+1, (i+1)*int((mesh(1)+2)/(subx))]
-                    domy = [j*int((mesh(2)+2)/suby)+1, (j+1)*int((mesh(2)+2)/(suby))]
+                    domx = [int(i*(mesh(1)+2)/subx)+1, int((i+1)*(mesh(1)+2)/(subx))]
+                    domy = [int(j*(mesh(2)+2)/suby)+1, int((j+1)*(mesh(2)+2)/(suby))]
                     exit L_O
                 end if
             end do
@@ -2342,7 +2305,7 @@ program main
   
     if (id == 0) then
         print*,'Press Return to continue'
-       ! read(*,*)
+       read(*,*)
     end if
     call MPI_barrier(MPI_COMM_WORLD, ierr)
     
@@ -2370,7 +2333,7 @@ program main
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         
-        call walls(icell,jcell,mesh,malha,domx,domy,wall(1:1),wall(2:2),wall(3:3),wall(4:4),id) ! altera posição e malha
+        call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id) ! altera posição e malha
         
         ! print*, "L 1714", id
         ! if (id == 0) read(*,*)
@@ -2422,12 +2385,6 @@ program main
                 ! MPI_GATHERV    (sbuf,   scount,  stype, rbuf, rcounts,  displs,   rtype,  root,  comm,  ierr)
                 call MPI_GATHERV(nxv_send, aux1, MPI_DOUBLE_PRECISION, nxv, rcounts, &
                  displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
-                
-                ! o processo raiz imprime os resultados
-                ! print*, "id", id, "nxv_send:", nxv_send(1:aux1)
-
-                ! if (id == 0) print*, "nxv:", nxv
-
             else 
                 nxv = nxv_send
             end if 

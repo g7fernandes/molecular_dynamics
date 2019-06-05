@@ -1,6 +1,6 @@
 # Start of the makefile
 # Defining variables
-objects = m_config.o linkedlist.o lennard.o data.o matprint.o randnormal.o mod1.o
+objects = m_config.o linkedlist.o saida.o lennard.o data.o mod0.o matprint.o randnormal.o mod1.o
 f90comp = mpiifort
 switch = -O3
 # Makefile
@@ -16,6 +16,10 @@ data.mod: data.o data.f90
 	$(f90comp) -c $(switch) data.f90
 linkedlist.mod: linkedlist.o linkedlist.f90
 	$(f90comp) -c $(switch) linkedlist.f90
+mod0.mod: mod0.o mod0.f90
+	$(f90comp) -c $(switch) mod0.f90
+saida.mod: saida.o saida.f90
+	$(f90comp) -c $(switch) saida.f90
 m_config.mod: m_config.o m_config.f90
 	$(f90comp) -c $(switch) m_config.f90
 randnormal.o: randnormal.f90
@@ -28,12 +32,16 @@ data.o: data.f90
 	$(f90comp) -c $(switch) data.f90
 linkedlist.o: linkedlist.f90
 	$(f90comp) -c $(switch) linkedlist.f90
-m_config.o: m_config.f90
+mod0.o: mod0.f90
+	$(f90comp) -c $(switch) mod0.f90
+saida.o: saida.f90
+	$(f90comp) -c $(switch) saida.f90
+m_config.o: saida.f90
 	$(f90comp) -c $(switch) m_config.f90
-lennard.o: mod1.mod linkedlist.mod data.mod matprint.mod m_config.mod randnormal.mod lennard.f90
+lennard.o: mod1.mod linkedlist.mod mod0.mod saida.mod data.mod matprint.mod m_config.mod randnormal.mod lennard.f90
 	$(f90comp) -c $(switch) lennard.f90
 # Cleaning everything
 clean:
 	rm $(objects)
-	rm -f *.o *.mod *.MOD
+#	rm -f *.o *.mod *.MOD
 # End of the makefile
