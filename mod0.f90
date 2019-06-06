@@ -11,6 +11,7 @@ module mod0
             real(dp) :: m ! mass
             real(dp) :: epsilon 
             real(dp) :: sigma 
+            real(dp) :: rs !raio sólido 
             real(dp)  :: x_lockdelay    ! só vai poder mudar de posição a partir de t = x_lockdelay
         end type prop_grupo
 

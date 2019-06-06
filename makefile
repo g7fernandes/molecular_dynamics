@@ -1,6 +1,6 @@
 # Start of the makefile
 # Defining variables
-objects = m_config.o linkedlist.o saida.o lennard.o data.o mod0.o matprint.o randnormal.o mod1.o
+objects = m_config.o linkedlist.o mod1.o saida.o lennard.o data.o mod0.o matprint.o randnormal.o 
 f90comp = mpiifort
 switch = -O3
 # Makefile

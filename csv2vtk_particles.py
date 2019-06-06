@@ -47,9 +47,11 @@ N = int(config['global']['N'].split()[0])
 nimpre =  int(config['global']['nimpre'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
 quant = []
+rs = [] # raio sólido
 
 for i in range(ntype):
     quant.append(int(config['par_'+str(i)]['quantidade'].split()[0]))
+    rs.append(float(config['par_'+str(i)]['rs'].split()[0]))
 
 a = os.listdir('temp')
 if len(a)/2 < nimpre:
@@ -57,12 +59,17 @@ if len(a)/2 < nimpre:
     nimpre = int(len(a)/2)-1
 
 tipo = np.zeros(N)
+rsol = np.zeros(N)
 j,k = 0,0
 for i in range(len(quant)):
     for j in range(quant[i]):
         tipo[j+k] = i
+        rsol[j+k] = rs[i]
     k = quant[i]
         
+# for i in range(len(rsol)):
+#     print("{} {}".format(i,rsol[i]))
+
 # Ler os arquivos e colocá-los em vetores
 
 x = np.zeros(N)
@@ -114,8 +121,8 @@ for fnum in range(0,nimpre+1):
             
     #shutil.move(via+'/cell.csv.'+str(fnum),via+'/'+folder+'/cell.csv.'+str(fnum))    
     
-    pointsToVTK(via+'/'+folder +'/result_'+str(fnum), x, y, z, data = {"Vx" : vx, "Vy" : vy, "Tipo" : tipo})        #, "Cellx" : cx, "Celly" : cy
+    pointsToVTK(via+'/'+folder +'/result_'+str(fnum), x, y, z, data = {"Vx" : vx, "Vy" : vy, "Tipo" : tipo, "raio_solido" : rsol })        #, "Cellx" : cx, "Celly" : cy
 
-shutil.rmtree('temp')
+#shutil.rmtree('temp')
         
         
