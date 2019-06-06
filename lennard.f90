@@ -320,7 +320,7 @@ module fisica
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp), intent(in) :: GField(2), t
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
-        real(dp) :: x1(2),v1(2),x2(2),v2(2)
+        real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2 
         integer :: i,j,ct = 0 !,ptr, ptrn
         integer, intent(in) :: mesh(:),domx(2),domy(2)
         real(dp) :: Fi(2)=0,r, aux2(2),fR(2)
@@ -344,6 +344,7 @@ module fisica
                     x1 = ptr%p%x
                     v1 = ptr%p%v
                     m1 = propriedade(ptr%p%grupo)%m
+                    rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
                     sigma_a = propriedade(ptr%p%grupo)%sigma
                     ! rcut = r_cut*sigma
                     epsil_a = propriedade(ptr%p%grupo)%epsilon 
@@ -361,23 +362,24 @@ module fisica
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                         sigma_b = propriedade(ptrn%p%grupo)%sigma
                         epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                        rs2 = propriedade(ptrn%p%grupo)%rs 
                         ! Lorenz-Betherlot rule for mixing epsilon sigma 
                         if (sigma_a > sigma_b) then
-                            rcut = r_cut*sigma_a
+                            rcut = r_cut*sigma_a + rs1 + rs2
                             sigma = 0.5*(sigma_a + sigma_b)
                             epsil = sqrt(epsil_a *epsil_b )
                         else if (sigma_a < sigma_b) then 
-                            rcut = r_cut*sigma_b
+                            rcut = r_cut*sigma_b + rs1 + rs2
                             sigma = 0.5*(sigma_a + sigma_b)
                             epsil = sqrt(epsil_a *epsil_b )
                         else 
-                            rcut = r_cut*sigma_a
+                            rcut = r_cut*sigma_a + rs1 + rs2
                             sigma = sigma_a
                             epsil = epsil_a
                         end if 
                         x2 = ptrn%p%x
                         v2 = ptrn%p%v
-                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - rs1 - rs2 !raio
                         if (r <= rcut) then
                             aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]  
                             if (fric_term > 0) then
@@ -398,24 +400,25 @@ module fisica
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            rs2 = propriedade(ptrn%p%grupo)%rs 
                             ! Lorenz-Betherlot rule for mixing epsilon sigma 
                             if (sigma_a > sigma_b) then
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a + rs1 + rs2
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil = sqrt(epsil_a*epsil_b)
                             else if (sigma_a < sigma_b) then 
-                                rcut = r_cut*sigma_b
+                                rcut = r_cut*sigma_b + rs1 + rs2
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil = sqrt(epsil_a*epsil_b)
                             else 
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a + rs1 + rs2
                                 sigma = sigma_a
                                 epsil = epsil_a
                             end if 
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  - rs1 - rs2 !raio
                             if (r <= rcut) then
                                 aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                 if (fric_term > 0) then
@@ -433,24 +436,25 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + rs1 + rs2
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + rs1 + rs2
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - rs1 - rs2 !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -472,22 +476,22 @@ module fisica
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a+(rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b+(rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a+(rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio   
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)-(rs1 + rs2)  !raio   
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -509,24 +513,25 @@ module fisica
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            rs2 = propriedade(ptrn%p%grupo)%rs 
                             ! Lorenz-Betherlot rule for mixing epsilon sigma 
                             if (sigma_a > sigma_b) then
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a+(rs1 + rs2)
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil = sqrt(epsil_a*epsil_b)
                             else if (sigma_a < sigma_b) then 
-                                rcut = r_cut*sigma_b
+                                rcut = r_cut*sigma_b+(rs1 + rs2)
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil  = sqrt(epsil_a*epsil_b)
                             else 
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a +(rs1 + rs2)
                                 sigma = sigma_a
                                 epsil = epsil_a
                             end if 
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v                            
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
                             if (r <= rcut) then
                                 aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                 if (fric_term > 0) then
@@ -544,24 +549,25 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -585,24 +591,25 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -620,24 +627,25 @@ module fisica
                                     ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
-                                        rcut = r_cut*sigma_a
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
                                         sigma = 0.5*(sigma_a + sigma_b)
                                         epsil = sqrt(epsil_a*epsil_b)
                                     else if (sigma_a < sigma_b) then 
-                                        rcut = r_cut*sigma_b
+                                        rcut = r_cut*sigma_b + (rs1 + rs2)
                                         sigma = 0.5*(sigma_a + sigma_b)
                                         epsil = sqrt(epsil_a*epsil_b)
                                     else 
-                                        rcut = r_cut*sigma_a
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
                                         sigma = sigma_a
                                         epsil = epsil_a
                                     end if 
 
                                     x2 = ptrn%p%x
                                     v2 = ptrn%p%v
-                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
                                     if (r <= rcut) then
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                         if (fric_term > 0) then
@@ -658,17 +666,18 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
@@ -676,7 +685,7 @@ module fisica
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
                                 
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  - (rs1 + rs2)  !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -693,23 +702,24 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -726,24 +736,25 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
                                     sigma = 0.5*(sigma_a + sigma_b)
                                     epsil = sqrt(epsil_a*epsil_b)
                                 else 
-                                    rcut = r_cut*sigma_a
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
                                     sigma = sigma_a
                                     epsil = epsil_a
                                 end if 
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                     if (fric_term > 0) then
@@ -761,24 +772,25 @@ module fisica
                                     ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
-                                        rcut = r_cut*sigma_a
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
                                         sigma = 0.5*(sigma_a + sigma_b)
                                         epsil = sqrt(epsil_a*epsil_b)
                                     else if (sigma_a < sigma_b) then 
-                                        rcut = r_cut*sigma_b
+                                        rcut = r_cut*sigma_b + (rs1 + rs2)
                                         sigma = 0.5*(sigma_a + sigma_b)
                                         epsil = sqrt(epsil_a*epsil_b)
                                     else 
-                                        rcut = r_cut*sigma_a
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
                                         sigma = sigma_a
                                         epsil = epsil_a
                                     end if 
 
                                     x2 = ptrn%p%x
                                     v2 = ptrn%p%v
-                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) -  (rs1 + rs2)  !raio
                                     if (r <= rcut) then
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                         if (fric_term > 0) then
@@ -799,24 +811,25 @@ module fisica
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            rs2 = propriedade(ptrn%p%grupo)%rs 
                             ! Lorenz-Betherlot rule for mixing epsilon sigma 
                             if (sigma_a > sigma_b) then
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a + (rs1 + rs2)
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil = sqrt(epsil_a*epsil_b)
                             else if (sigma_a < sigma_b) then 
-                                rcut = r_cut*sigma_b
+                                rcut = r_cut*sigma_b + (rs1 + rs2)
                                 sigma = 0.5*(sigma_a + sigma_b)
                                 epsil = sqrt(epsil_a*epsil_b)
                             else 
-                                rcut = r_cut*sigma_a
+                                rcut = r_cut*sigma_a + (rs1 + rs2)
                                 sigma = sigma_a
                                 epsil = epsil__a
                             end if 
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
                             if (r <= rcut) then
                                 aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
                                 if (fric_term > 0) then
@@ -2112,6 +2125,8 @@ program main
             "epsilon"//particle)  
         call CFG_add(my_cfg, particle//"%x_lockdelay",1.1_dp, &
             "change in position delay "//particle)       
+        call CFG_add(my_cfg, particle//"%rs",1.1_dp, &
+            "solid radius "//particle)   
     end do
     
     dx_max = 10*dimx !pra definir critério de estabilidade no uso de malha
@@ -2126,6 +2141,7 @@ program main
         call CFG_get(my_cfg, particle//"%epsilon", propriedade(i+1)%epsilon)
         call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
         call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
+        call CFG_get(my_cfg, particle//"%rs", propriedade(i+1)%rs)
         ! le o arquivo com posições
         if (dx_max < propriedade(i+1)%sigma*rcut/2) then
             dx_max = propriedade(i+1)%sigma*rcut/2
@@ -2435,8 +2451,6 @@ program main
     end do
 
     ! print*, 'L 2112', id 
-    ! if (id == 0) read(*,*)
-    ! call MPI_barrier(MPI_COMM_WORLD, ierr)
     call clean_mesh(malha, mesh, domx, domy,id,.true.)
     deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
             LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
