@@ -56,7 +56,10 @@ if sum(quant) != N:
     change = True
 
 if change:
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
+    print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n")
     a = input("Changes will be made to the settings file. Enter to proceed or Ctrl+C to abort.")
+    a = input()
     with open('settings.ini', 'w') as configfile:
         config.write(configfile)
 

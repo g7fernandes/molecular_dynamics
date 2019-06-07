@@ -216,7 +216,7 @@ module fisica
         
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
-                if (i >= s_cells(1) .and. i <= s_cells(2) .and. j >= s_cells(3) .and. j <= s_cells(4)) then
+                if (j >= s_cells(1) .and. j <= s_cells(2) .and. i >= s_cells(3) .and. i <= s_cells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -274,7 +274,7 @@ module fisica
         betah = sqrt(Td_hot/T_hot)
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
-                if (i >= cold_cells(1) .and. i <= cold_cells(2) .and. j >= cold_cells(3) .and. j <= cold_cells(4)) then
+                if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -284,7 +284,7 @@ module fisica
                         end if
                         node => list_next(node)
                     end do
-                else if (i >= hot_cells(1) .and. i <= hot_cells(2) .and. j >= hot_cells(3) .and. j <= hot_cells(4)) then
+                else if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -2013,7 +2013,8 @@ program main
     call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
 
     ! argumento para checar NAN no nancheck
-    call system('python verify_settings.py')
+    if(id == 0) call system('python verify_settings.py')
+    call MPI_barrier(MPI_COMM_WORLD, ierr)
     call get_command_argument(1, arg)
     arg1 = trim(arg)
     
@@ -2458,7 +2459,7 @@ program main
         call cpu_time(finish)
         print '("Time = ",f10.3," seconds.")',(finish-start)
         open(unit=22,file='settings.txt',status="old", position="append", action="write")
-        write(22,*) "Execution time = ",(finish-start)," seconds."
+        write(22,*) "#:Execution time = ",(finish-start)," seconds."
         close(22)
         call system('python csv2vtk_particles.py')
     end if

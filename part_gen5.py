@@ -15,26 +15,31 @@ from random import randint
 arquivo1 = 'grupo0.csv'
 
 N = 1000
-L1 = 190
-L2 = 100
+L1 = 200
+L2 = 300
 spac = 0.999*((L1*L2)/(N))**0.5
 d1 = int(L1/spac)
 d2 = int(L2/spac)
 N = d1*d2
-N1 = N
+N1 = N*2
 # Posição das partículas
 p1 = np.zeros([N1,2])
 
 #posição de referência
 refe = np.array([0.01,0.01])
 print("d1*spac = {}, L1 = {}, d2*spac = {}, L2 = {}\n".format(d1*spac+refe[0],L1, d2*spac+refe[1], L2))
-print("N = {}, spac = {}\n".format(N,spac))
+print("N = {}, spac = {}\n".format(N*2,spac))
 cont = 0
 
 
 for i in range(d1):
     for j in range(d2):
         p1[cont,:] = [i*spac+refe[0],j*spac+refe[1]]
+        cont = cont+1
+refe = np.array([1199.9,299.9])        
+for i in range(d1):
+    for j in range(d2):
+        p1[cont,:] = [-i*spac+refe[0],-j*spac+refe[1]]
         cont = cont+1
 
 plt.scatter(p1[:,0],p1[:,1], label='grupo0')
@@ -48,23 +53,23 @@ with open(arquivo1,'w') as file:
 
 #####################################
 
-arquivo1 = 'particula_grande.csv'
+arquivo1 = 'p_g.csv'
 
 N = 20
-L1 = 300
-L2 = 100
-spac = 0.999*((L1*L2)/(N))**0.5
-d1 = int(L1/spac)
-d2 = int(L2/spac)
+L1 = 1200
+L2 = 260
+spac = 0.999*((L2)/(N))
+d1 = 1 #int(L1/spac)
+d2 = N #int(L2/spac)
 N = d1*d2
 N1 = N
 # Posição das partículas
 p1 = np.zeros([N1,2])
 
 #posição de referência
-refe = np.array([200,40])
+refe = np.array([600,20])
 print("d1*spac = {}, L1 = {}, d2*spac = {}, L2 = {}\n".format(d1*spac+refe[0],L1, d2*spac+refe[1], L2))
-print("N = {}\n".format(N))
+print("N = {}, spac= {}\n".format(N,spac))
 cont = 0
 
 
