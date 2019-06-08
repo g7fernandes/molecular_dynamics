@@ -48,13 +48,20 @@ nimpre =  int(config['global']['nimpre'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
 quant = []
 rs = [] # raio sólido
-
+sigma = []
 for i in range(ntype):
     quant.append(int(config['par_'+str(i)]['quantidade'].split()[0]))
     rs.append(float(config['par_'+str(i)]['rs'].split()[0]))
+    sigma.append(float(config['par_'+str(i)]['sigma'].split()[0]))
+
+rs = np.array(rs)
+sigma = np.array(sigma)
+rs = rs + sigma*(2**(1/6))
 
 a = os.listdir('temp')
+no_out_files = nimpre
 if len(a)/2 < nimpre:
+    no_out_files = int(len(a)/2)
     print("Propable incomplete execution. Processing {} files\n.".format(len(a)/2))
     nimpre = int(len(a)/2)-1
 
@@ -83,6 +90,10 @@ vz = np.zeros(N)
 cx = np.zeros(N)
 cy = np.zeros(N)
 cz = np.zeros(N)
+
+with open("settings.txt","a") as settingstxt:
+    settingstxt.write("[out_files]")
+    settingstxt.write("out_files = {}".format(no_out_files))
 
 try:
     shutil.move(via+'/settings.txt',via+'/'+folder+'/settings.txt') 
