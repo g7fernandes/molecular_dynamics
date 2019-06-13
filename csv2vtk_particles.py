@@ -68,12 +68,15 @@ if len(a)/2 < nimpre:
 tipo = np.zeros(N)
 rsol = np.zeros(N)
 j,k = 0,0
+
 for i in range(len(quant)):
     for j in range(quant[i]):
         tipo[j+k] = i
         rsol[j+k] = rs[i]
-    k = quant[i]
+    k = sum(quant[0:i+1])
         
+
+# a = input("a")
 # for i in range(len(rsol)):
 #     print("{} {}".format(i,rsol[i]))
 

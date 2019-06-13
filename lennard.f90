@@ -321,7 +321,7 @@ module fisica
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp), intent(in) :: GField(2), t
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
-        real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2 
+        real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2, coss, sine   
         integer :: i,j,ct = 0 !,ptr, ptrn
         integer, intent(in) :: mesh(:),domx(2),domy(2)
         real(dp) :: Fi(2)=0,r, aux2(2),fR(2)
@@ -380,9 +380,18 @@ module fisica
                         end if 
                         x2 = ptrn%p%x
                         v2 = ptrn%p%v
-                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - rs1 - rs2 !raio
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                        coss = (x1(1)-x2(1))/r 
+                        sine = (x1(2)-x2(2))/r 
+                        r = r - rs1 - rs2 !raio
                         if (r <= rcut) then
-                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]  
+                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+!                             print*, " "
+!                             print*, " >> ptr", ptr%p%n,"ptrn", ptrn%p%n
+!                             print*, "r =", r
+! print '("(x1(1)-x2(1)) ", f7.3 ," (rs1+rs2)*coss ", f7.3, " (x1(2)-x2(2)) ", f7.3, " (rs1+rs2)*sine ", f7.3 )', (x1(1)-x2(1)), &
+!  (rs1+rs2)*coss, (x1(2)-x2(2)), (rs1+rs2)*sine
                             if (fric_term > 0) then
                                 fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                             end if
@@ -419,9 +428,13 @@ module fisica
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  - rs1 - rs2 !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                            coss = (x1(1)-x2(1))/r 
+                            sine = (x1(2)-x2(2))/r 
+                            r = r - rs1 - rs2 !raio
                             if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                [ (x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                 if (fric_term > 0) then
                                     fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                 end if
@@ -455,9 +468,13 @@ module fisica
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - rs1 - rs2 !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                       [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
@@ -492,9 +509,13 @@ module fisica
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)-(rs1 + rs2)  !raio   
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio   
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
@@ -532,9 +553,13 @@ module fisica
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v                            
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                            coss = (x1(1)-x2(1))/r 
+                            sine = (x1(2)-x2(2))/r 
+                            r = r - rs1 - rs2 !raio
                             if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                 if (fric_term > 0) then
                                     fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                 end if
@@ -568,9 +593,13 @@ module fisica
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
@@ -610,9 +639,13 @@ module fisica
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
@@ -646,9 +679,13 @@ module fisica
 
                                     x2 = ptrn%p%x
                                     v2 = ptrn%p%v
-                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                    coss = (x1(1)-x2(1))/r 
+                                    sine = (x1(2)-x2(2))/r 
+                                    r = r - rs1 - rs2 !raio
                                     if (r <= rcut) then
-                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
                                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
@@ -686,9 +723,13 @@ module fisica
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
                                 
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  - (rs1 + rs2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
@@ -720,9 +761,13 @@ module fisica
                                 end if 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
@@ -755,9 +800,13 @@ module fisica
 
                                 x2 = ptrn%p%x
                                 v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2)  !raio
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
                                 if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
@@ -791,9 +840,13 @@ module fisica
 
                                     x2 = ptrn%p%x
                                     v2 = ptrn%p%v
-                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) -  (rs1 + rs2)  !raio
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                    coss = (x1(1)-x2(1))/r 
+                                    sine = (x1(2)-x2(2))/r 
+                                    r = r - rs1 - rs2 !raio
                                     if (r <= rcut) then
-                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], &
                                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
@@ -830,9 +883,13 @@ module fisica
 
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2) - (rs1 + rs2) !raio
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                            coss = (x1(1)-x2(1))/r 
+                            sine = (x1(2)-x2(2))/r 
+                            r = r - rs1 - rs2 !raio
                             if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil*[(x1(1)-x2(1)), (x1(2)-x2(2))]
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                 if (fric_term > 0) then
                                     fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                 end if
@@ -1049,9 +1106,10 @@ module fisica
                     end if 
                     ptr%p%flag = .false.
                     if ((dx(1)**2 + dx(2)**2) >= dx_max) then
-                        print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n", i4)', dx(1), dx(2), ptr%p%n 
-                        ! print*, "F",ptr%p%F, "v", ptr%p%v
-                        dx = [0,0]
+                        print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
+                        print*, "F",ptr%p%F, "v", ptr%p%v
+                        call system('killall lennard.out')
+                        dx = [dx(1)/dx(1),dx(1)/dx(1)]*dx_max
                         read(*,*)
                     end if
                     ptr%p%x(1) = ptr%p%x(1) + dx(1) !dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
@@ -1547,6 +1605,8 @@ module fisica
                         m = propriedade(ptr%p%grupo)%m
                         ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
                         ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m)    
+                        ! print '("{{ n ", i2, " F ", f8.3, " ", f8.3)',ptr%p%n,ptr%p%F(1),ptr%p%F(2)
+                        ! print '("{{ n ", i2, " v ", f8.3, " ", f8.3)',ptr%p%n,ptr%p%v(1),ptr%p%v(2)
                     end if
                     ptr%p%F = [0,0]
                     node => list_next(node)
