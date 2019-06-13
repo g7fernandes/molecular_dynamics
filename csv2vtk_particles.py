@@ -91,14 +91,6 @@ cx = np.zeros(N)
 cy = np.zeros(N)
 cz = np.zeros(N)
 
-with open("settings.txt","a") as settingstxt:
-    settingstxt.write("[out_files]")
-    settingstxt.write("out_files = {}".format(no_out_files))
-
-try:
-    shutil.move(via+'/settings.txt',via+'/'+folder+'/settings.txt') 
-except:
-    print('No settings file found!\n')
 
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
@@ -118,9 +110,35 @@ for fnum in range(0,nimpre+1):
             vy[i] = linea[1]
             
             i = i+1
-            
     shutil.move(via+'/temp/velocity.csv.'+str(fnum),via+'/'+folder+'/velocity.csv.'+str(fnum))
-    
+
+    fin = 0
+    grupo = 0
+    for k in quant:
+        ini = fin      
+        fin = k + fin 
+        xs = x[ini:fin]
+        ys = y[ini:fin]
+        zs = z[ini:fin]
+        vxs = vx[ini:fin]
+        vys = vy[ini:fin]
+        tipos = tipo[ini:fin]
+        rsols = rsol[ini:fin]
+        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols })       
+        grupo += 1
+
+#shutil.rmtree('temp')
+        
+        
+with open("settings.txt","a") as settingstxt:
+    settingstxt.write("[out_files]")
+    settingstxt.write("out_files = {}".format(no_out_files))
+
+try:
+    shutil.move(via+'/settings.txt',via+'/'+folder+'/settings.txt') 
+except:
+    print('No settings file found!\n')
+
     #with open('cell.csv.'+str(fnum),encoding='utf-8') as file_velocitas:
         #csv_lector = csv.reader(file_velocitas,delimiter = ',')
         #i = 0
@@ -130,10 +148,4 @@ for fnum in range(0,nimpre+1):
             
             #i = i+1
             
-    #shutil.move(via+'/cell.csv.'+str(fnum),via+'/'+folder+'/cell.csv.'+str(fnum))    
-    
-    pointsToVTK(via+'/'+folder +'/result_'+str(fnum), x, y, z, data = {"Vx" : vx, "Vy" : vy, "Tipo" : tipo, "raio_solido" : rsol })        #, "Cellx" : cx, "Celly" : cy
-
-#shutil.rmtree('temp')
-        
-        
+    #shutil.move(via+'/cell.csv.'+str(fnum),via+'/'+folder+'/cell.csv.'+str(fnum))  

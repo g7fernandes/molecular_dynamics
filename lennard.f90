@@ -315,6 +315,7 @@ module fisica
         use mod1
         use data
         use mod0
+        use mpi
         
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
@@ -846,6 +847,7 @@ module fisica
             end do
         end do
          !print*, 'Linha 143'
+        ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
     end subroutine comp_F
     
@@ -1025,28 +1027,30 @@ module fisica
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
                 ! print*, i,j, "id", id
-                 ! ptr%p%flag = true significa que ainda não foi computado para evitar loop
+                 ! ptr%p%flag = true significa que ainda não foi computado para evitar loop infinito
                 
                 if (associated(node))  then
                     ptr = transfer(list_get(node), ptr)
-                    
-                    ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
-                    if (propriedade(ptr%p%grupo)%x_lockdelay > t) then
-                        ptr%p%flag = .false. 
-                    end if 
                 end if
                 
                 do while (associated(node) .and. ptr%p%flag)
                     ! print*, "L PART", i,j, "id", id   
                     m = propriedade(ptr%p%grupo)%m
                     ! print*, 'grupo =', ptr%p%grupo, 'massa=', m
-                    ptr%p%flag = .false. 
                     ! ptr = transfer(list_get(node), ptr)
-                    dx(1) = dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
-                    dx(2) = dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
+                    ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
+                    if (propriedade(ptr%p%grupo)%x_lockdelay > t) ptr%p%flag = .false. 
+                         
+                    if (ptr%p%flag) then 
+                        dx(1) = dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
+                        dx(2) = dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
+                    else 
+                        dx = [0,0]
+                    end if 
+                    ptr%p%flag = .false.
                     if ((dx(1)**2 + dx(2)**2) >= dx_max) then
                         print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n", i4)', dx(1), dx(2), ptr%p%n 
-                        print*, "F",ptr%p%F, "v", ptr%p%v
+                        ! print*, "F",ptr%p%F, "v", ptr%p%v
                         dx = [0,0]
                         read(*,*)
                     end if
@@ -1254,15 +1258,8 @@ module fisica
                         previous_node => node
                         node => list_next(node)
                         ! print*, "L740 FORÇA", ptr%p%F, id
-
                     end if
-                    if (associated(node))  then
-                        ptr = transfer(list_get(node), ptr)
-                        ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
-                        if (propriedade(ptr%p%grupo)%x_lockdelay > t) then
-                            ptr%p%flag = .false. 
-                        end if 
-                    end if
+                    if (associated(node)) ptr = transfer(list_get(node), ptr)
                 end do      
             end do
         end do
@@ -1545,6 +1542,7 @@ module fisica
                 node => list_next(malha(i,j)%list)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
+                    ! print*, "n",  ptr%p%n, "F =",ptr%p%F, "v =",ptr%p%v
                     if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
                         m = propriedade(ptr%p%grupo)%m
                         ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
