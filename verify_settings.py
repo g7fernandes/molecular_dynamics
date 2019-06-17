@@ -4,6 +4,7 @@ import configparser
 change = False
 aux = True
 config = configparser.ConfigParser()
+config.optionxform=str
 
 while (aux):
     try:
@@ -69,6 +70,15 @@ except ModuleNotFoundError:
     print("Evtk module not found! You will not be able to convert the .CSV files to .VTU. Try:\n")
     print("conda install -c e3sm evtk     OR\npip install pyevtk")
 
+with open('settings.ini','r') as file:
+    data = file.readlines()
+
+for line in range(len(data)):
+    if data[line][0] != "[" and data[line][0] != "#" and data[line][0] != " ":
+        data[line] = '\t' + data[line]
+
+with open('settings.ini','w') as file:
+    file.writelines(data)
 
 
 

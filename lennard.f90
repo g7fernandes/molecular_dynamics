@@ -310,7 +310,7 @@ module fisica
         
     
     ! atualiza forças
-    subroutine comp_F(GField, mesh,malha,propriedade,r_cut,fric_term,domx,domy, ids, id, t)
+    subroutine comp_F(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id, t)
         use linkedlist
         use mod1
         use data
@@ -324,15 +324,28 @@ module fisica
         real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2, coss, sine   
         integer :: i,j,ct = 0 !,ptr, ptrn
         integer, intent(in) :: mesh(:),domx(2),domy(2)
-        real(dp) :: Fi(2)=0,r, aux2(2),fR(2)
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
  
         !Lennard Jones
         fR = [0,0]
-        do i = domy(1),domy(2) ! i é linha
-            do j = domx(1),domx(2)
+        dox = domx 
+        doy = domy 
+        if (sum(ids(1:4)) > -4) then
+            !caso paralelo
+            if (domx(1) > 1) dox(1) = domx(1) - 1
+            if (domy(1) > 1) doy(1) = domy(1) - 1
+            if (domx(2) < mesh(1)+2) dox(2) = domx(2) + 1
+            if (domy(2) < mesh(2)+2) doy(2) = domy(2) + 1
+        else
+            dox = domx 
+            doy = domy 
+        end if 
+        
+        do i = doy(1),doy(2) ! i é linha
+            do j = dox(1),dox(2)
                 node => list_next(malha(i,j)%list)
                 if (associated(node)) then
                     ptr = transfer(list_get(node), ptr)
@@ -346,6 +359,7 @@ module fisica
                     v1 = ptr%p%v
                     m1 = propriedade(ptr%p%grupo)%m
                     rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
+                    fric_term1 = propriedade(ptr%p%grupo)%fric_term
                     sigma_a = propriedade(ptr%p%grupo)%sigma
                     ! rcut = r_cut*sigma
                     epsil_a = propriedade(ptr%p%grupo)%epsilon 
@@ -364,6 +378,7 @@ module fisica
                         sigma_b = propriedade(ptrn%p%grupo)%sigma
                         epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                         rs2 = propriedade(ptrn%p%grupo)%rs 
+                        fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                         ! Lorenz-Betherlot rule for mixing epsilon sigma 
                         if (sigma_a > sigma_b) then
                             rcut = r_cut*sigma_a + rs1 + rs2
@@ -384,234 +399,23 @@ module fisica
                         coss = (x1(1)-x2(1))/r 
                         sine = (x1(2)-x2(2))/r 
                         r = r - rs1 - rs2 !raio
+                        ! print*, "L 389 r", r, "id",id
                         if (r <= rcut) then
                             aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                             print*, " "
-!                             print*, " >> ptr", ptr%p%n,"ptrn", ptrn%p%n
-!                             print*, "r =", r
-! print '("(x1(1)-x2(1)) ", f7.3 ," (rs1+rs2)*coss ", f7.3, " (x1(2)-x2(2)) ", f7.3, " (rs1+rs2)*sine ", f7.3 )', (x1(1)-x2(1)), &
-!  (rs1+rs2)*coss, (x1(2)-x2(2)), (rs1+rs2)*sine
+                            ! print*, "L 395 r", r, "id",id
+  !print '("(x1(1)-x2(1)) ", f7.3 ," (rs1+rs2)*coss ", f7.3, " (x1(2)-x2(2)) ", f7.3, " (rs1+rs2)*sine ", f7.3 )', (x1(1)-x2(1)), &
+  !(rs1+rs2)*coss, (x1(2)-x2(2)), (rs1+rs2)*sine
+                            fric_term = (fric_term1+fric_term2)/2
                             if (fric_term > 0) then
-                                fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                             end if
                             ptr%p%F = aux2 + ptr%p%F +fR
                             ptrn%p%F = -aux2 + ptrn%p%F - fR
                          end if
                         node => list_next(node) ! próxima partícula da célula
                     end do
-
-                    !! PARA CASO PARALELO, INTERAGIR COM AS CELULAS AO NORTE E A OESTE
-                    ! SUL
-                    if (ids(2) > -1 .and. i == domy(1)) then
-                        node => list_next(malha(i-1,j)%list) !interagirá com a anterior linha apenas
-                        do while (associated(node))
-                            
-                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                            sigma_b = propriedade(ptrn%p%grupo)%sigma
-                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                            rs2 = propriedade(ptrn%p%grupo)%rs 
-                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
-                            if (sigma_a > sigma_b) then
-                                rcut = r_cut*sigma_a + rs1 + rs2
-                                sigma = 0.5*(sigma_a + sigma_b)
-                                epsil = sqrt(epsil_a*epsil_b)
-                            else if (sigma_a < sigma_b) then 
-                                rcut = r_cut*sigma_b + rs1 + rs2
-                                sigma = 0.5*(sigma_a + sigma_b)
-                                epsil = sqrt(epsil_a*epsil_b)
-                            else 
-                                rcut = r_cut*sigma_a + rs1 + rs2
-                                sigma = sigma_a
-                                epsil = epsil_a
-                            end if 
-
-                            x2 = ptrn%p%x
-                            v2 = ptrn%p%v
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
-                            coss = (x1(1)-x2(1))/r 
-                            sine = (x1(2)-x2(2))/r 
-                            r = r - rs1 - rs2 !raio
-                            if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                [ (x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                if (fric_term > 0) then
-                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                end if
-                                ptr%p%F = aux2 + ptr%p%F +fR
-                                ! ptrn%p%F  = -aux2 + ptrn%p%F - fR
-                            end if
-                            node => list_next(node) ! próxima partícula da célula
-                        end do
-                        
-                        if (j /= 1) then !se não for a primeira coluna 
-                            node => list_next(malha(i-1,j-1)%list) !interagá com a linha e coluna anterior
-                            do while (associated(node))
-                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                                sigma_b = propriedade(ptrn%p%grupo)%sigma
-                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                                rs2 = propriedade(ptrn%p%grupo)%rs 
-                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
-                                if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a + (rs1 + rs2)
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b + rs1 + rs2
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else 
-                                    rcut = r_cut*sigma_a + rs1 + rs2
-                                    sigma = sigma_a
-                                    epsil = epsil_a
-                                end if 
-
-                                x2 = ptrn%p%x
-                                v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
-                                coss = (x1(1)-x2(1))/r 
-                                sine = (x1(2)-x2(2))/r 
-                                r = r - rs1 - rs2 !raio
-                                if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                       [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                end if
-                                node => list_next(node) ! próxima partícula da célula
-                            end do                            
-                        end if
-
-                        if (j /= mesh(1)+2) then !se não for a última coluna 
-                            node => list_next(malha(i-1,j+1)%list) !interagá com a linha e coluna anterior
-                            do while (associated(node))
-                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                                sigma_b = propriedade(ptrn%p%grupo)%sigma
-                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
-                                if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a+(rs1 + rs2)
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b+(rs1 + rs2)
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else 
-                                    rcut = r_cut*sigma_a+(rs1 + rs2)
-                                    sigma = sigma_a
-                                    epsil = epsil_a
-                                end if 
-
-                                x2 = ptrn%p%x
-                                v2 = ptrn%p%v
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
-                                coss = (x1(1)-x2(1))/r 
-                                sine = (x1(2)-x2(2))/r 
-                                r = r - rs1 - rs2 !raio   
-                                if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                end if
-                                node => list_next(node) ! próxima partícula da célula
-                            end do                            
-                        end if
-                    end if 
-
-                    ! OESTE
-                    if (ids(4) > -1 .and. j == domx(1)) then 
-                        node => list_next(malha(i,j-1)%list) !interagirá com a anterior linha apenas
-                        do while (associated(node))
-                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                            sigma_b = propriedade(ptrn%p%grupo)%sigma
-                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                            rs2 = propriedade(ptrn%p%grupo)%rs 
-                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
-                            if (sigma_a > sigma_b) then
-                                rcut = r_cut*sigma_a+(rs1 + rs2)
-                                sigma = 0.5*(sigma_a + sigma_b)
-                                epsil = sqrt(epsil_a*epsil_b)
-                            else if (sigma_a < sigma_b) then 
-                                rcut = r_cut*sigma_b+(rs1 + rs2)
-                                sigma = 0.5*(sigma_a + sigma_b)
-                                epsil  = sqrt(epsil_a*epsil_b)
-                            else 
-                                rcut = r_cut*sigma_a +(rs1 + rs2)
-                                sigma = sigma_a
-                                epsil = epsil_a
-                            end if 
-
-                            x2 = ptrn%p%x
-                            v2 = ptrn%p%v                            
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
-                            coss = (x1(1)-x2(1))/r 
-                            sine = (x1(2)-x2(2))/r 
-                            r = r - rs1 - rs2 !raio
-                            if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                if (fric_term > 0) then
-                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                end if
-                                ptr%p%F = aux2 + ptr%p%F +fR
-                                ! ptrn%p%F = -aux2 + ptrn%p%F - fR
-                            end if
-                            node => list_next(node) ! próxima partícula da célula
-                        end do
-                        
-                        if (i /= mesh(2)+2) then !se não for a primeira linha 
-                            node => list_next(malha(i+1,j-1)%list) !interagá com a linha e coluna anterior
-                            do while (associated(node))
-                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                                sigma_b = propriedade(ptrn%p%grupo)%sigma
-                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                                rs2 = propriedade(ptrn%p%grupo)%rs 
-                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
-                                if (sigma_a > sigma_b) then
-                                    rcut = r_cut*sigma_a + (rs1 + rs2)
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else if (sigma_a < sigma_b) then 
-                                    rcut = r_cut*sigma_b + (rs1 + rs2)
-                                    sigma = 0.5*(sigma_a + sigma_b)
-                                    epsil = sqrt(epsil_a*epsil_b)
-                                else 
-                                    rcut = r_cut*sigma_a + (rs1 + rs2)
-                                    sigma = sigma_a
-                                    epsil = epsil_a
-                                end if 
-
-                                x2 = ptrn%p%x
-                                v2 = ptrn%p%v                                
-                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
-                                coss = (x1(1)-x2(1))/r 
-                                sine = (x1(2)-x2(2))/r 
-                                r = r - rs1 - rs2 !raio
-                                if (r <= rcut) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ! ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                end if
-                                node => list_next(node) ! próxima partícula da célula
-                            end do                            
-                        end if
-                    end if                     
-                    !! fim do caso para paralelismo
 
                     !Células ao redor  !i é linha, j é coluna
                     if (i /= mesh(2)+2) then ! se não for a última linha
@@ -622,6 +426,7 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -643,11 +448,14 @@ module fisica
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
+                                ! print*, "L 666 r", r, "id",id
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
+                                    fric_term = (fric_term1+fric_term2)/2 
                                     if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -662,6 +470,7 @@ module fisica
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                     rs2 = propriedade(ptrn%p%grupo)%rs 
+                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
                                         rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -683,12 +492,14 @@ module fisica
                                     coss = (x1(1)-x2(1))/r 
                                     sine = (x1(2)-x2(2))/r 
                                     r = r - rs1 - rs2 !raio
+                                    ! print*, "L 710 r", r, "id",id
                                     if (r <= rcut) then
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
+                                        fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], & 
-                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -704,7 +515,8 @@ module fisica
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
-                                rs2 = propriedade(ptrn%p%grupo)%rs 
+                                rs2 = propriedade(ptrn%p%grupo)%rs
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -727,11 +539,14 @@ module fisica
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
+                                ! print*, "L 757 r", r, "id",id
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                    fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -745,6 +560,7 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -765,11 +581,14 @@ module fisica
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
+                                ! print*, "L 798 r", r, "id",id
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                    fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -783,6 +602,7 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -804,11 +624,14 @@ module fisica
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
+                                ! print*, "L 841 r", r, "id",id
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                    fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -823,6 +646,7 @@ module fisica
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                     rs2 = propriedade(ptrn%p%grupo)%rs 
+                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
                                         rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -844,12 +668,14 @@ module fisica
                                     coss = (x1(1)-x2(1))/r 
                                     sine = (x1(2)-x2(2))/r 
                                     r = r - rs1 - rs2 !raio
+                                    ! print*, "L 885 r", r, "id",id
                                     if (r <= rcut) then
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                        fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))], &
-                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -866,6 +692,7 @@ module fisica
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                             rs2 = propriedade(ptrn%p%grupo)%rs 
+                            fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                             ! Lorenz-Betherlot rule for mixing epsilon sigma 
                             if (sigma_a > sigma_b) then
                                 rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -887,11 +714,14 @@ module fisica
                             coss = (x1(1)-x2(1))/r 
                             sine = (x1(2)-x2(2))/r 
                             r = r - rs1 - rs2 !raio
+                            ! print*, "L 931 r", r, "id",id
                             if (r <= rcut) then
                                 aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                fric_term = (fric_term1+fric_term2)/2
                                 if (fric_term > 0) then
-                                    fR = comp_fric([-(x1(1)-x2(1)),-(x1(2)-x2(2))],[-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
                                 end if
                                 ptr%p%F = aux2 + ptr%p%F +fR
                                 ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1108,14 +938,16 @@ module fisica
                     if ((dx(1)**2 + dx(2)**2) >= dx_max) then
                         print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
                         print*, "F",ptr%p%F, "v", ptr%p%v
+                        print*, "x", ptr%p%x(1), ptr%p%x(2)
                         call system('killall lennard.out')
                         dx = [dx(1)/dx(1),dx(1)/dx(1)]*dx_max
                         read(*,*)
                     end if
                     ptr%p%x(1) = ptr%p%x(1) + dx(1) !dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
                     ptr%p%x(2) = ptr%p%x(2) + dx(2) !dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
-                    ! print*,'F_0  = ',ptr%p%F(1),ptr%p%F(2), "id", id
+                    ! print*,'F_0  = ',ptr%p%F(1),ptr%p%F(2), "n", ptr%p%n, "id", id 
                     ! print '("x_0  = [",f10.3,", ",f10.3, "] ", "i, j =", i2, " ", i2, " n ",i2 )',ptr%p%x(1),ptr%p%x(2),i,j, ptr%p%n!"id", id, "n", ptr%p%n
+                    ! print '("v_0  = [",f10.3,", ",f10.3, "] ", "i, j =", i2, " ", i2, " n ",i2 )',ptr%p%v(1),ptr%p%v(2),i,j, ptr%p%n!"id", id, "n", ptr%p%n
                     ! Ordena as celulas
                     x = ptr%p%x
                     ! teste se a partícula pode pular celulas
@@ -1283,7 +1115,7 @@ module fisica
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
                             LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(3) = cont_db(3) + 6
                             cont_int(3) = cont_int(3) + 4
 
@@ -1291,7 +1123,7 @@ module fisica
                             !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                          !  ! print*, "L id",id,"transferindo para o oeste",  LT%lstrint_W
+                            ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(4) = cont_db(4) + 6
                             cont_int(4) = cont_int(4) + 4
                         end if
@@ -1761,7 +1593,7 @@ module fisica
                             ptr = transfer(list_get(node), ptr)
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2) 
-                                print*,ptr%p%n 
+                                ! print*,ptr%p%n 
                                 call list_change(previous_node,malha(mesh(2)+1,j)%list)
                                 node => list_next(previous_node)    
                             else 
@@ -2041,7 +1873,7 @@ program main
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
-    real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,fric_term,vd(2)
+    real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,vd(2)
     real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold
     integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)
     type(container), allocatable,dimension(:,:) :: malha
@@ -2117,9 +1949,7 @@ program main
     call CFG_add(my_cfg,"global%hot_cells",(/0, 0, 0, 0/), &
         "Hot Cells")
     call CFG_add(my_cfg,"global%vd",(/0.0_dp, 0.0_dp/), &
-        "Mean vd")            
-    call CFG_add(my_cfg,"global%fric_term",1.0_dp, &
-        "Friction term")       
+        "Mean vd")                 
     call CFG_add(my_cfg,"global%NMPT",1, &
         "Max Number of particles that will change process per iteraction")
     call CFG_add(my_cfg,"global%GField",(/0.0_dp, 0.0_dp/), &
@@ -2143,7 +1973,6 @@ program main
     call CFG_get(my_cfg,"global%Td_cold",Td_cold)
     call CFG_get(my_cfg,"global%Td_hot",Td_hot)
     call CFG_get(my_cfg,"global%vd",vd)
-    call CFG_get(my_cfg,"global%fric_term",fric_term)
     call CFG_get(my_cfg,"global%NMPT",NMPT)
     call CFG_get(my_cfg,"global%GField",GField)
     
@@ -2185,7 +2014,9 @@ program main
         call CFG_add(my_cfg, particle//"%x_lockdelay",1.1_dp, &
             "change in position delay "//particle)       
         call CFG_add(my_cfg, particle//"%rs",1.1_dp, &
-            "solid radius "//particle)   
+            "solid radius "//particle) 
+        call CFG_add(my_cfg,particle//"%fric_term",1.0_dp, &
+            "Friction term")    
     end do
     
     dx_max = 10*dimx !pra definir critério de estabilidade no uso de malha
@@ -2201,6 +2032,8 @@ program main
         call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
         call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
         call CFG_get(my_cfg, particle//"%rs", propriedade(i+1)%rs)
+        call CFG_get(my_cfg, particle//"%fric_term",propriedade(i+1)%fric_term)
+
         ! le o arquivo com posições
         if (dx_max < propriedade(i+1)%sigma*rcut/2) then
             dx_max = propriedade(i+1)%sigma*rcut/2
@@ -2416,7 +2249,7 @@ program main
    
     do while (t_fim > t)
         ! print*, "L 1990"
-        call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t)  !altera Força
+        call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força
         ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
         ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
         ! que o processo vai cuidar (subdivisões)
@@ -2434,7 +2267,7 @@ program main
         ! print*, "L 1714", id
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-        call comp_F(GField, mesh,malha,propriedade,rcut,fric_term,domx,domy,ids,id,t) !altera força
+        call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t) !altera força
         ! print*, "L 1717"
         call comp_v(malha,mesh,dt,t,propriedade,domx,domy) !altera velocidade
         ! print*, "1721"

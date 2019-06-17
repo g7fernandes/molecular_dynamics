@@ -57,7 +57,6 @@ for i in range(ntype):
 rs = np.array(rs)
 sigma = np.array(sigma)
 rs = rs + sigma*(2**(1/6))
-
 a = os.listdir('temp')
 no_out_files = nimpre
 if len(a)/2 < nimpre:

@@ -13,6 +13,7 @@ module mod0
             real(dp) :: sigma 
             real(dp) :: rs !raio sólido 
             real(dp)  :: x_lockdelay    ! só vai poder mudar de posição a partir de t = x_lockdelay
+            real(dp) :: fric_term
         end type prop_grupo
 
             ! LSTR  lista de transferência pro MPI

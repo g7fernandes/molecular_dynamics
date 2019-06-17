@@ -22,6 +22,7 @@ n_files = int(config['out_files']['out_files'].split()[0])
 
 subspaces = float(input("Enter in how many subspaces the region of calculus will be divided.\nThe \
 subspaces should contain particles enough for the statistic.\n"))
+
 print("The velocity and distribution of the particles will be calculated in one direction.\n")
 #direction = input("Enter the direction x or y\n")
 print('x-direction\n')
@@ -53,6 +54,7 @@ while int(step) >= 0:
         mean_Kenergy =  (1/2)*velocity_map**2/concentration_map
         mean_Kenergy[mean_Kenergy == np.inf] = 0
         mean_Kenergy = np.nan_to_num(mean_Kenergy)
+        
         fig, ax1 = plt.subplots()
         ax1.plot(np.linspace(0,dimx,subspaces),mean_Kenergy,'b')
         ax1.set_xlabel("x - direction")
