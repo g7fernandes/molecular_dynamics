@@ -1883,7 +1883,7 @@ program main
     type(CFG_t) :: my_cfg
     character(5) :: particle
     character(4) :: wall
-    character(11) :: nome,arquivo !nome de partícula deve ter até 11 caracteres
+    character(11) :: nome,arquivox, arquivov = '%' !nome de partícula deve ter até 11 caracteres
     type(string) :: part_nomes(10) ! vetor de strings
     character(1) :: optio
     type(data_ptr) :: ptr !integer,pointer :: ptr,ptrn
@@ -2000,9 +2000,11 @@ program main
         call CFG_add(my_cfg, particle//"%m",1.1_dp,&
            "mass of "//particle)
         call CFG_add(my_cfg, particle//"%v",(/0.0_dp, 0.0_dp/), &
-            "velocity of "//particle)         
+            "global velocity of "//particle)         
         call CFG_add(my_cfg, particle//"%x","arquivo.csv", &
-            "position of "//particle)     
+            "position of "//particle)   
+        call CFG_add(my_cfg, particle//"%v_file","arquivo.csv", &
+            "velecities of "//particle)     
         call CFG_add(my_cfg, particle//"%nome",'abcde', &
             "name of "//particle)  
         call CFG_add(my_cfg, particle//"%quantidade",1, &
@@ -2026,7 +2028,8 @@ program main
         call CFG_get(my_cfg, particle//"%quantidade", quant)
         call CFG_get(my_cfg, particle//"%nome", nome)
         part_nomes(i+1)%str = nome
-        call CFG_get(my_cfg, particle//"%x", arquivo)
+        call CFG_get(my_cfg, particle//"%x", arquivox)
+        call CFG_get(my_cfg, particle//"%v_file", arquivov)
         call CFG_get(my_cfg, particle//"%m", propriedade(i+1)%m)
         call CFG_get(my_cfg, particle//"%epsilon", propriedade(i+1)%epsilon)
         call CFG_get(my_cfg, particle//"%sigma", propriedade(i+1)%sigma)
@@ -2038,14 +2041,23 @@ program main
         if (dx_max < propriedade(i+1)%sigma*rcut/2) then
             dx_max = propriedade(i+1)%sigma*rcut/2
         end if 
-
-        open(20,file=arquivo,status='old')
-        do j = 1,quant
-            call CFG_get(my_cfg, particle//"%v", v(cont,:))    
-            grupo(cont) = i+1
-            read(20,*) x(cont,:) !,x(cont,2),x(cont,3)
-            cont = cont+1
-        end do
+        open(20,file=arquivox,status='old')
+        if (arquivov(1:1) /= '%') then ! usa arquivo com velocidades
+            open(30,file=arquivov,status='old')
+            do j = 1,quant
+                grupo(cont) = i+1
+                read(20,*) x(cont,:) 
+                read(30,*) v(cont,:)
+                cont = cont+1
+            end do        
+        else 
+            do j = 1,quant
+                call CFG_get(my_cfg, particle//"%v", v(cont,:))    
+                grupo(cont) = i+1
+                read(20,*) x(cont,:) !,x(cont,2),x(cont,3)
+                cont = cont+1
+            end do
+        end if
     end do
     dx_max = dx_max**2
    ! mostra informações lidas

@@ -16,7 +16,7 @@ arquivo1 = 'grupo0.csv'
 
 N = 1000
 L1 = 200
-L2 = 400
+L2 = 600
 spac = 0.999*((L1*L2)/(N))**0.5
 d1 = int(L1/spac)
 d2 = int(L2/spac)
@@ -36,11 +36,13 @@ for i in range(d1):
     for j in range(d2):
         p1[cont,:] = [i*spac+refe[0],j*spac+refe[1]]
         cont = cont+1
-refe = np.array([1199.9,399.9])        
+refe = np.array([1199.9,599.9])        
 for i in range(d1):
     for j in range(d2):
         p1[cont,:] = [-i*spac+refe[0],-j*spac+refe[1]]
         cont = cont+1
+
+np.random.shuffle(p1)
 
 plt.scatter(p1[:,0],p1[:,1], label='grupo0')
 # plt.legend()
@@ -57,7 +59,7 @@ arquivo1 = 'p_g.csv'
 
 N = 20
 L1 = 1200
-L2 = 320
+L2 = 520
 spac = 1.1*((L2)/(N))
 d1 = 1 #int(L1/spac)
 d2 = N #int(L2/spac)
@@ -92,7 +94,7 @@ arquivo1 = 'p_p.csv'
 
 N = 20
 L1 = 1200
-L2 = 320
+L2 = 520
 spac = 1.1*((L2)/(N))
 d1 = 1 #int(L1/spac)
 d2 = N #int(L2/spac)
