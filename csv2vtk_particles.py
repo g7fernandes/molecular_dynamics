@@ -133,7 +133,7 @@ for fnum in range(0,nimpre+1):
         
         
 with open("settings.txt","a") as settingstxt:
-    settingstxt.write("[out_files]")
+    settingstxt.write("[out_files]\n")
     settingstxt.write("out_files = {}".format(no_out_files))
 
 try:
