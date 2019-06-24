@@ -943,6 +943,13 @@ module fisica
                         dx = [dx(1)/dx(1),dx(1)/dx(1)]*dx_max
                         read(*,*)
                     end if
+                    if (isnan(dx(1)) .or. isnan(dx(2))) then
+                        print '("NaN NaN Nan Batman! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
+                        print*, "F",ptr%p%F, "v", ptr%p%v
+                        print*, "x", ptr%p%x(1), ptr%p%x(2)
+                        call system('killall lennard.out')
+                    end if
+                    
                     ptr%p%x(1) = ptr%p%x(1) + dx(1) !dt*ptr%p%v(1) + ptr%p%F(1)*dt**2/(2*m)
                     ptr%p%x(2) = ptr%p%x(2) + dx(2) !dt*ptr%p%v(2) + ptr%p%F(2)*dt**2/(2*m)
                     ! print*,'F_0  = ',ptr%p%F(1),ptr%p%F(2), "n", ptr%p%n, "id", id 
@@ -1132,7 +1139,7 @@ module fisica
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
                             LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                          !  ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
 
@@ -1140,7 +1147,7 @@ module fisica
                             !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                          !  ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                        !    print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(1) = cont_db(1) + 6
                             cont_int(1) = cont_int(1) + 4
                         end if
@@ -2049,7 +2056,8 @@ program main
                 read(20,*) x(cont,:) 
                 read(30,*) v(cont,:)
                 cont = cont+1
-            end do        
+            end do   
+            close(30)     
         else 
             do j = 1,quant
                 call CFG_get(my_cfg, particle//"%v", v(cont,:))    
@@ -2058,6 +2066,7 @@ program main
                 cont = cont+1
             end do
         end if
+        close(20)
     end do
     dx_max = dx_max**2
    ! mostra informações lidas
@@ -2332,7 +2341,6 @@ program main
             
             if (id == 0) then
                 do ii = 0, N-1
-
                     x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3)]
                     v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5)]
                 end do

@@ -93,6 +93,7 @@ cx = np.zeros(N)
 cy = np.zeros(N)
 cz = np.zeros(N)
 
+nID = np.linspace(1,N,N)
 
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
@@ -126,10 +127,12 @@ for fnum in range(0,nimpre+1):
         vys = vy[ini:fin]
         tipos = tipo[ini:fin]
         rsols = rsol[ini:fin]
-        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols })       
+        nIDs = nID[ini:fin]
+        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
         grupo += 1
 
-#shutil.rmtree('temp')
+
+shutil.rmtree('temp')
         
         
 with open("settings.txt","a") as settingstxt:
