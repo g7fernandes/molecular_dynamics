@@ -1890,7 +1890,7 @@ program main
     type(CFG_t) :: my_cfg
     character(5) :: particle
     character(4) :: wall
-    character(11) :: nome,arquivox, arquivov = '%' !nome de partícula deve ter até 11 caracteres
+    character(20) :: nome,arquivox, arquivov = '%' !nome de partícula deve ter até 20 caracteres
     type(string) :: part_nomes(10) ! vetor de strings
     character(1) :: optio
     type(data_ptr) :: ptr !integer,pointer :: ptr,ptrn
