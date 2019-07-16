@@ -117,7 +117,9 @@ stdscr = 's' #para barra de progresso
 sample_list = []
 r0 = []
 p0 = []
-Q = 
+Qxy = np.zeros((nsteps,1))
+Qyx = np.zeros((nsteps,1))
+#eta = np.zeros((nsteps,1))
 
 while step <= nsteps: 
 
@@ -150,17 +152,25 @@ while step <= nsteps:
                     m = mass[pos_vel.loc[n1,'tipo']]
                     p0.append([pos_vel.loc[n1,'v_x']*m, pos_vel.loc[n1,'v_y']*m])
         r0 = np.array(r0)
+        r1 = np.zeros( (len(sample_list),2) )
+        p0 = np.array(p0)
+        p1 = np.zeros( (len(sample_list),2) )
     else:
         for nn in range(len(sample_list)):
             n1 = sample_list[nn]
-            r1.append([pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']])
+            r1[nn,:] =  [pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']]
             m = mass[pos_vel.loc[n1,'tipo']]
-            p1.append([pos_vel.loc[n1,'v_x']*m, pos_vel.loc[n1,'v_y']*m])
+            p1[nn,:] = [pos_vel.loc[n1,'v_x']*m, pos_vel.loc[n1,'v_y']*m]
+
+        Qxy[step-1] = np.sum(r1[:,0]*p1[:,1], axis=0)/Vol
+        Qyx[step-1] = np.sum(r1[:,1]*p1[:,0], axis=0)/Vol
     step += 1
 
-    mqd = mqd/len(sample_list)
+eta = (Qxy - np.sum(r0[:,0]*p0[:,1]))/len(sample_list) #completar 
 
-# plt.show()
+
+plt.plot(eta)
+plt.show()
 
 
             

@@ -1876,7 +1876,7 @@ program main
     implicit none
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2)
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4)
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
@@ -1926,7 +1926,9 @@ program main
     call CFG_add(my_cfg, "global%dt",0.0_dp,&
       "time step")
     call CFG_add(my_cfg, "global%t_fim",0.0_dp,&
-      "simulation time")
+      "simulation time") 
+    call CFG_add(my_cfg, "global%nimpre_init",0,&
+      "start nimpre") 
     call CFG_add(my_cfg, "global%nimpre",1,&
       "number of result files")
     call CFG_add(my_cfg, "global%dimX",1.0_dp,&
@@ -1966,6 +1968,7 @@ program main
     call CFG_get(my_cfg,"global%N",N)
     call CFG_get(my_cfg,"global%Ntype",Ntype)
     call CFG_get(my_cfg,"global%t_fim",t_fim)
+    call CFG_get(my_cfg,"global%nimpre_init",nimpre_init)
     call CFG_get(my_cfg,"global%dt",dt)
     call CFG_get(my_cfg,"global%nimpre",nimpre)
     call CFG_get(my_cfg,"global%dimX", dimX)
@@ -2268,6 +2271,12 @@ program main
     j = 1
     j2 = 1
    
+    if (nimpre_init > 0) then
+        j = nimpre_init
+        t = t_fim*nimpre_init/nimpre
+        i = interv(j)
+    end if
+
     do while (t_fim > t)
         ! print*, "L 1990"
         call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força

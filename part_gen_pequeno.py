@@ -63,9 +63,9 @@ from random import randint
 Ntot = 0 
 arquivo1 = 'bin_peq1.csv'
 
-N = 200
-L1 = 200
-L2 = 200
+N = 1100
+L1 = 400
+L2 = 400
 spac = 0.999*((L1*L2)/(N))**0.5
 d1 = int(L1/spac)
 d2 = int(L2/spac)
@@ -94,9 +94,9 @@ plt.scatter(p1[:,0],p1[:,1], label='pequeno1')
 
 arquivo1 = 'bin_peq2.csv'
 
-N = 200
-L1 = 200
-L2 = 200
+N = 1100
+L1 = 400
+L2 = 400
 spac = 0.999*((L1*L2)/(N))**0.5
 d1 = int(L1/spac)
 d2 = int(L2/spac)

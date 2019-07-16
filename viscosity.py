@@ -264,8 +264,8 @@ for step in range(nsteps):
             etakp[i,j,step] = Vol*Ik[i,j,step]*Ip[i,j,step]/density_map[i,j,step]
             etapp[i,j,step] = Vol*Ip[i,j,step]**2/density_map[i,j,step]
 
-# plt.plot(etakk[0,0,:]+etakp[0,0,:]+etapp[0,0,:])
-# plt.show()
+plt.plot(etakk[0,0,:]+etakp[0,0,:]+etapp[0,0,:])
+plt.show()
 
 
             

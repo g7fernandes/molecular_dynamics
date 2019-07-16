@@ -110,6 +110,11 @@ r = np.zeros((mesh[0],mesh[1],nsteps+1))
 
 mqd = np.zeros(nsteps)
 
+step = input('Enter de initial step:\n')
+try: 
+    step = int(step)
+except:
+    step = 0 
 
 step = 0 
 n1,n2 = 0,0
@@ -150,24 +155,31 @@ while step <= nsteps:
         r0 = np.array(r0)
         r1 = np.zeros( (len(sample_list),2) )
         desv = np.zeros((len(particle_map[i][j]),nsteps))
+        desvx = np.zeros((len(particle_map[i][j]),nsteps))
+        desvy = np.zeros((len(particle_map[i][j]),nsteps))
     else:
         for nn in range(len(sample_list)):
             n1 = sample_list[nn]
             r1[nn,:] =  [pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']]
         r1 = np.array(r1) - r0
-        desv[:,step-1] = np.sqrt(r1[:,0]**2 + r1[:,1]**2)
-
+        desvx[:,step-1] = r1[:,0] 
+        desvy[:,step-1] = r1[:,1] 
             # mqd[step-1] += ((r1[0] - r0[nn,0])**2 + (r1[1] - r0[nn,1])**2)
     step += 1
 
-
+desv = np.sqrt(desvx**2 + desvy**2)
 mqd = np.sum(desv**2,axis=0)/len(sample_list)
 
+plt.figure()
 plt.plot(mqd)
 plt.xlabel('time steps x ....')
 plt.ylabel('4D')
 
-# plt.show()
+plt.figure()
+for i in range(10):
+    plt.plot(desvx[np.random.randint(len(desv[:,0])),:])
+
+plt.show()
 
 
             
