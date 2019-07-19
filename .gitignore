@@ -1,0 +1,9 @@
+*.csv
+*.mod
+*.o
+*.bkp
+binario
+result
+binario_gradiente
+binario_gradiente1
+pequeno

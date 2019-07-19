@@ -13,6 +13,14 @@ from evtk.hl import pointsToVTK
 import numpy as np
 import csv, os, shutil
 import configparser
+try:
+    import progressbar
+    pbar = True 
+except:
+    print('progressbar not available. Try one:')
+    print('conda install -c conda-forge progressbar2')
+    print('conda install -c conda-forge/label/gcc7 progressbar2')
+    pbar = False
 
 via = os.getcwd()
 
@@ -42,7 +50,7 @@ print('The results will be saved at {}'.format(folder))
 
 config = configparser.ConfigParser()
 config.read('settings.ini')
-
+print('Reading settings.ini')
 N = int(config['global']['N'].split()[0])
 nimpre =  int(config['global']['nimpre'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
@@ -95,6 +103,9 @@ cz = np.zeros(N)
 
 nID = np.linspace(1,N,N)
 
+print('Converting...')
+if pbar:
+    bar = progressbar.ProgressBar(max_value=nimpre)
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
         csv_lector = csv.reader(file_locus,delimiter = ',')
@@ -131,7 +142,8 @@ for fnum in range(0,nimpre+1):
         pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
         grupo += 1
 
-
+    if pbar:
+        bar.update(fnum)
 shutil.rmtree('temp')
         
         
@@ -143,6 +155,18 @@ try:
     shutil.move(via+'/settings.txt',via+'/'+folder+'/settings.txt') 
 except:
     print('No settings file found!\n')
+
+include_folder = True 
+if os.path.isfile('.gitignore'):
+    with open('.gitignore','a+') as file:
+        for line in file:
+            if line == folder:
+                include_folder = False
+        if include_folder:
+            file.write(folder+'\n')
+else:
+    with open('.gitignore','a+') as file:
+        file.write(folder+'\n')
 
     #with open('cell.csv.'+str(fnum),encoding='utf-8') as file_velocitas:
         #csv_lector = csv.reader(file_velocitas,delimiter = ',')

@@ -5,7 +5,14 @@ import configparser
 import matplotlib.pyplot as plt
 from glob import glob
 import time
-import curses # para progressbar
+try:
+    import progressbar
+    pbar = True 
+except:
+    print('progressbar not available. Try one:')
+    print('conda install -c conda-forge progressbar2')
+    print('conda install -c conda-forge/label/gcc7 progressbar2')
+    pbar = False
 
 def integral(F,i,j,dt):
     # sh = np.shape(F)
@@ -24,30 +31,37 @@ def integral(F,i,j,dt):
                 #     )
     return I
 
-def progressbar(step,total,message, stdscr):
-    # usar import curses
-    # inicializar uma strig vazia fora do loop para stdcr
-    if step == 0:  
-        stdscr = curses.initscr() 
-        stdscr.addstr(0, 0, message + "|" + " "*20 + "| {} %".format(0))
-        stdscr.refresh()
-        return stdscr
-    elif step < total-1:
-        a = int(20*step/total)
-        b = 20-a
-        stdscr.addstr(0, 0, message + "|" + "#"*a + " "*b + "| {} %".format(5*a))
-        stdscr.refresh()
-        return stdscr
-        #print("#",end='')
-    else:
-        a = int(20*step/total)
-        b = 20-a        
-        stdscr.addstr(0, 0, message + "|" + "#"*a + " "*b + "| {} %".format(5*a))
-        curses.endwin()
-        print("\n")    
-        return "0"
-    
+def diff1(F,h):
+    B = np.zeros((len(F),1))
+    for i in range(len(F)):
+        if i > 1 and i < len(F) - 2:
+            B[i] = ((1/12)*F[i-2] + (-2/3)*F[i-1] + (2/3)*F[i+1] + (-1/12)*F[i+2])/h   
+        elif i == 0:
+            B[i] = ((-11/6)*F[0] + 3*F[1] + (-3/2)*F[2] + (1/3)*F[3])/h 
+        elif i == 1:
+            B[i] = (-2*F[0]-3*F[1]+6*F[2]-1*F[3])/(6*h)
+        elif i == len(F)-1:
+            B[i] = (1*F[i-2]-4*F[i-1]+3*F[i+0])/(2*1.0*h**1)
+        elif i == len(F)-2:
+            B[i] = (1*F[i-2]-6*F[i-1]+3*F[i+0]+2*F[i+1])/(6*1.0*h**1)
+    return B
 
+def greenkubo(Tk,Tp,i,j,na,dt):
+    itv = int(Tp.shape[2]/na)
+    kk = np.zeros((itv))
+    kp = np.zeros((itv))
+    pp = np.zeros((itv))
+    for a in range(itv):
+        for b in range(na):
+            kk[a] += np.trapz(Tk[i,j,b*itv:b*itv+a],dx=dt)**2
+            kp[a] += np.trapz(Tp[i,j,b*itv:b*itv+a],dx=dt)*np.trapz(Tk[i,j,b*itv:b*itv+a],dx=dt)
+            pp[a] += np.trapz(Tp[i,j,b*itv:b*itv+a],dx=dt)**2
+    kk = kk/na
+    pp = pp/na
+    kp = kp/na 
+    return kk, kp, pp
+
+    
 dirname = os.getcwd() #os.path.dirname(os.path.abspath(__file__))
 dirlist = glob(dirname + "/*/")
 print("Choose a folder there the results are contained:\nNo | Folder")
@@ -64,7 +78,7 @@ dimy = float(config['global']['dimY'].split()[0])
 n_files = int(config['out_files']['out_files'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
 t_fim = float(config['global']['t_fim'].split()[0])
-dt = float(config['global']['dt'].split()[0])
+#dt = float(config['global']['dt'].split()[0])
 F = np.array([0,0])
 quant = []
 sigma = []
@@ -110,12 +124,12 @@ tauxyp = np.zeros((mesh[0],mesh[1],nsteps+1))
 
 step = 0 
 n1,n2 = 0,0
-stdscr = 's' #para barra de progresso
 
+if pbar:
+    bar = progressbar.ProgressBar(max_value=nsteps)
 while step <= nsteps: 
     particle_map = [[[] for _ in range(mesh[1])] for _ in range(mesh[0])]
-    #stdscr = progressbar(step,nsteps,'Computing:',stdscr)
-    print(step)
+
     pos = pd.read_csv(res_dir+"position.csv."+str(step), header=None, names = ["x","y"])
     vel = pd.read_csv(res_dir+"velocity.csv."+str(step), header=None, names = ["v_x", "v_y"])
     n = [x for x in range(len(pos))]
@@ -165,6 +179,7 @@ while step <= nsteps:
                     tauxyp[i,j,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
                 # na celula vizinha i+1, j 
                 if i+1 < region[1]:
+                    print('A')
                     for nn2 in range(1,len(particle_map[i+1][j])):
                         n2 = particle_map[i+1][j][nn2]
                         rs2 = rs[pos_vel.loc[n2,'tipo']]
@@ -184,6 +199,7 @@ while step <= nsteps:
                             time.sleep(2)
                 # na celula vizinha i+1, j+1 
                 if i+1 < region[1] and j+1 < region[3]:
+                    print('B')
                     for nn2 in range(1,len(particle_map[i+1][j+1])):
                         n2 = particle_map[i+1][j+1][nn2]
                         rs2 = rs[pos_vel.loc[n2,'tipo']]
@@ -203,6 +219,7 @@ while step <= nsteps:
                             time.sleep(2)
                 # na celula vizinha i, j+1 
                 if j+1 < region[3]:
+                    print('C')
                     for nn2 in range(1,len(particle_map[i][j+1])):
                         n2 = particle_map[i][j+1][nn2]
                         rs2 = rs[pos_vel.loc[n2,'tipo']]
@@ -222,6 +239,7 @@ while step <= nsteps:
                             time.sleep(2)
                 # na celula vizinha i-1, j+1 
                 if i-1 >= region[0] and j+1 < region[3]:
+                    print('D')
                     for nn2 in range(1,len(particle_map[i-1][j+1])):
                         n2 = particle_map[i-1][j+1][nn2]
                         rs2 = rs[pos_vel.loc[n2,'tipo']]
@@ -239,6 +257,8 @@ while step <= nsteps:
                         if r == 0:
                             print('nn {} {}'.format(nn,nn2))
                             time.sleep(2)
+    if pbar:
+        bar.update(step)
     step += 1
 
 
@@ -246,25 +266,29 @@ while step <= nsteps:
 tauxyp = tauxyp/Vol
 tauxyk = tauxyk/Vol
 
-Ik = np.zeros((mesh[0],mesh[1],nsteps))
-Ip = np.zeros((mesh[0],mesh[1],nsteps))
-etakk = np.zeros((mesh[0],mesh[1],nsteps))
-etakp = np.zeros((mesh[0],mesh[1],nsteps))
-etapp = np.zeros((mesh[0],mesh[1],nsteps))
-
 # vamos fazer um gráfico 
-for step in range(nsteps):
-    for i in range(region[0], region[1]):
-        for j in range(region[2], region[3]):
-            Ik[i,j,step] = integral(tauxyk,i,j,dt)
-            Ip[i,j,step] = integral(tauxyp,i,j,dt)
-            
-            # tem que dividir por 2kT
-            etakk[i,j,step] = Vol*Ik[i,j,step]**2/density_map[i,j,step]
-            etakp[i,j,step] = Vol*Ik[i,j,step]*Ip[i,j,step]/density_map[i,j,step]
-            etapp[i,j,step] = Vol*Ip[i,j,step]**2/density_map[i,j,step]
 
-plt.plot(etakk[0,0,:]+etakp[0,0,:]+etapp[0,0,:])
+na = int(input('Enter de number of assembles (na) to average.\nThe number of steps for correlation will be nsteps/na: '))
+etakk = np.zeros((mesh[0],mesh[1],int(nsteps/na)))
+etakp = np.zeros((mesh[0],mesh[1],int(nsteps/na)))
+etapp = np.zeros((mesh[0],mesh[1],int(nsteps/na)))
+for i in range(region[0], region[1]):
+    for j in range(region[2], region[3]):
+        etakk[i,j,:],etakp[i,j,:],etapp[i,j,:] = greenkubo(tauxyk,tauxyp,i,j,na,dt)
+
+ij = input('i j pro grafico: ').split()
+i,j = int(ij[0]),int(ij[1])
+t = np.linspace(0,t_fim/na,int(nsteps/na))
+plt.figure(1)
+plt.plot(t,etapp[i,j,:],label='etapp*t')
+plt.plot(t,etakp[i,j,:],label='etakp*t')
+plt.plot(t,etakk[i,j,:],label='etakk*t')
+etatot = etakk[i,j,:]+etakp[i,j,:]+etapp[i,j,:]
+plt.plot(t,etatot,'.k',label='sum')
+m,b = np.polyfit(t, etatot, 1)
+y = m*t + b 
+plt.plot(t,y,'-k',label='Eta*t fit')
+plt.legend()
 plt.show()
 
 
