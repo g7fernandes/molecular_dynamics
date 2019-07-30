@@ -111,6 +111,7 @@ sample_list = []
 Qxy = np.zeros((nsteps+1,1))
 Qyx = np.zeros((nsteps+1,1))
 Npart = np.zeros((nsteps+1,1))
+KE = np.zeros((nsteps+1,1)) # kT = KE
 #eta = np.zeros((nsteps,1))
 
 if pbar:
@@ -139,12 +140,18 @@ while step <= nsteps:
 
     for i in range(region[0],region[1]):
         for j in range(region[2],region[3]):
-            for nn in range(len(particle_map[i][j])):
+            nparcl = len(particle_map[i][j])
+            for nn in range(nparcl):
                 Npart[step] += 1 #numero de partículas na região neste passo 
                 n1 = particle_map[i][j][nn]
                 r0.append([pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']])
                 m = mass[pos_vel.loc[n1,'tipo']]
                 p0.append([pos_vel.loc[n1,'v_x']*m, pos_vel.loc[n1,'v_y']*m])
+                KE[step] += np.sqrt(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2)*m/nparcl
+
+
+
+                
     r0 = np.array(r0)
     p0 = np.array(p0)
     Qxy[step] += np.sum(r0[:,0]*p0[:,1], axis=0)/Vol 
@@ -153,30 +160,33 @@ while step <= nsteps:
         bar.update(step)
     step += 1
 
+KE2 = np.sum(KE[1:])/len(KE[1:])
 na = int(input('Enter de number of assembles (na) to average.\nThe number of steps for correlation will be nsteps/na: '))
 
-etaxy2t = einstein_relation(Qxy,na)
-etayx2t = einstein_relation(Qyx,na)
+etaxy2t = einstein_relation(Qxy,na)/Vol
+etayx2t = einstein_relation(Qyx,na)/Vol
 
-t = np.linspace(0,t_fim/na,len(etaxy2t))
+aux = len(etaxy2t)
+t = np.linspace(0,t_fim/na,aux)
 plt.figure(1)
-plt.plot(t,etaxy2t,'.r', label='etaxy')
+plt.plot(t,etaxy2t,'.r', label='etaxy*t')
 m,b = np.polyfit(t, etaxy2t, 1)
 y = m*t + b 
-plt.plot(t,y,'-r', label='etaxy fit')
+plt.plot(t,y,'-r', label='etaxy*t fit')
 plt.plot(t,etayx2t,'.b', label='etayx')
-m,b = np.polyfit(t, etayx2t, 1)
+m,b = np.polyfit(t[int(aux/2):], etayx2t[int(aux/2):], 1)
 y = m*t + b 
-plt.plot(t,y,'-b', label='etaxy fit')
+plt.plot(t,y,'-b', label='etaxy*t fit')
+print("eta = {}".format(m[0]))
 plt.legend()
 
-h = t_fim/nsteps 
-etaxy = diff1(etaxy2t,h)/2
-etayx = diff1(etayx2t,h)/2
-plt.figure(2)
-plt.plot(etaxy[1:len(etaxy)], label='etaxy*kT')
-plt.plot(etayx[1:len(etaxy)], label='etayx*kT')
-plt.plot((etayx[1:len(etaxy)]+etaxy[1:len(etaxy)])/2,'--k', label='eta*kT mean')
-plt.legend()
+# h = t_fim/nsteps 
+# etaxy = diff1(etaxy2t,h)/(2*KE2)
+# etayx = diff1(etayx2t,h)/(2*KE2)
+# plt.figure(2)
+# plt.plot(etaxy[1:len(etaxy)], label='etaxy*kT')
+# plt.plot(etayx[1:len(etaxy)], label='etayx*kT')
+# plt.plot((etayx[1:len(etaxy)]+etaxy[1:len(etaxy)])/2,'--k', label='eta*kT mean')
+# plt.legend()
 
 plt.show()
