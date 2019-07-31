@@ -747,6 +747,7 @@ module fisica
         use mpi
         use matprint
 
+        character(1) :: north, south, east, west
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
@@ -764,6 +765,11 @@ module fisica
          ! IDS correspondem às celulas [N,S,E,W]
         cont_db = 0
         cont_int = 0
+
+        north = wall(1:1)        
+        south = wall(2:2)
+        east = wall(3:3)
+        west = wall(4:4)
         !  if (id == 0) read(*,*) 
       
          ! Esvazia as celulas emprestadas 
@@ -1098,198 +1104,45 @@ module fisica
                             cont_int(2) = cont_int(2) + 4
                         end if
 
-                        ! PARA O CASO PERIODICO 
-
-                    if (cell(1) /= i .or. cell(2) /= j)  then !Mudou de celula
-                        ! print*, "MUDOU"
-                        ! if (id == 0) read(*,*)
-                        ! Se a partícula chegar na fronteira do domínio que um processador
-                        ! cuida, então esta partícula é colocada na lista linkada referente
-                        ! a este célula com list_change. Além disso ela precisa ser 
-                        ! transferida para o outro processo vizinho para que ele possa 
-                        ! calcular sua influência no domínio.
-                        ! Se a partícula ultrapassar o domínio, então ela é transferida
-                        ! para o próximo processo e dealocada da lista com list_remove 
-                        ! ! ! print*, "L FORÇA", ptr%p%F, id
-                        if (cell(2) >= domx(2) .and. cell(2) < mesh(1)+2 ) then
-                            ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
-                            ! 6 elementos
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1),x(2), &
-                            ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            ! 4 elementos
-                            ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! print*, "id",id,"transferindo para o leste",   LT%lstrint_E, "cont", cont_int(3)
-                            ! if (cell(2) > domx(2)) then
-                            !     ! print*, 'affs'
-                            !     ! read(*,*)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_E
-                                
-                            !     ! call list_remove(previous_node)
-                            !     ! print*, 'affs'
-                            !     ! node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
-                        end if 
-                        if (cell(2) <= domx(1) .and. cell(2) > 1) then
-                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            ! print*, "domx", domx
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! print*, "id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(2) < domx(1)) then
-                            !     ! print*, 'affs'
-                            !     ! read(*,*)
-                            !     ! print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_W
-                                
-                            ! !     call list_remove(previous_node)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
-                        end if 
-                        if (cell(1) >= domy(2) .and. cell(1) < mesh(2)+2) then
-                            ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
-                            ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(1) > domy(1)) then
-                            !     ! read(*,*)
-                            !     ! print*, 'affs'
-                            !     ! call list_remove(previous_node)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_N(cont_int(1)+1:cont_int(1)+4), "cont", cont_int(1)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-                        end if 
-                        if (cell(1) <= domy(1) .and. cell(1) > 1) then
-                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! ! print*, "L 583"
-                            ! print*, "id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(1) < domy(1)) then
-                            !     ! read(*,*)
-                            !     ! print*, 'affs'
-                            !     ! call list_remove(previous_node)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_S(cont_int(2)+1:cont_int(2)+4), "cont", cont_int(1)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     !!!! ! print*, "L 590"
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! !     !!!! ! print*, "L 624"
-                            ! end if 
-                            cont_db(2) = cont_db(2) + 6
-                            cont_int(2) = cont_int(2) + 4
-                        end if                        
-
                         ! CASO PERIODICO
 
-
-                        if (cell(2) >= domx(2) .and. cell(2) > mesh(1)+2 ) then
+                        if (east == 'p' .and. cell(2) == mesh(1)+2 ) then
                             ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
                             ! 6 elementos
-                            LT%lstrdb_EP(cont_db(3)+1:cont_db(3)+6) = [x(1),x(2), &
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
                             ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
                             ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrint_EP(cont_int(3)+1:cont_int(3)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! print*, "id",id,"transferindo para o leste",   LT%lstrint_E, "cont", cont_int(3)
-                            ! if (cell(2) > domx(2)) then
-                            !     ! print*, 'affs'
-                            !     ! read(*,*)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_E
-                                
-                            !     ! call list_remove(previous_node)
-                            !     ! print*, 'affs'
-                            !     ! node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
-                        end if 
-                        if (cell(2) <= domx(1) .and. cell(2) > 1) then
-                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            ! print*, "domx", domx
-                            LT%lstrdb_WP(cont_db(4)+1:cont_db(4)+6) = [x(1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_WP(cont_int(4)+1:cont_int(4)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! print*, "id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(2) < domx(1)) then
-                            !     ! print*, 'affs'
-                            !     ! read(*,*)
-                            !     ! print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_W
-                                
-                            ! !     call list_remove(previous_node)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
+
                             cont_db(4) = cont_db(4) + 6
                             cont_int(4) = cont_int(4) + 4
                         end if 
-                        if (cell(1) >= domy(2) .and. cell(1) < mesh(2)+2) then
+                        if (west == 'p' .and. cell(2) == 1) then
+                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                            ! print*, "domx", domx
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
+
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                        end if 
+                        if (north == 'p' .and. cell(1) == mesh(2)+2) then
                             ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
                             ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_NP(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_NP(cont_int(1)+1:cont_int(1)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(1) > domy(1)) then
-                            !     ! read(*,*)
-                            !     ! print*, 'affs'
-                            !     ! call list_remove(previous_node)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_N(cont_int(1)+1:cont_int(1)+4), "cont", cont_int(1)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-                        end if 
-                        if (cell(1) <= domy(1) .and. cell(1) > 1) then
-                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_SP(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_SP(cont_int(2)+1:cont_int(2)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! ! print*, "L 583"
-                            ! print*, "id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            ! if (cell(1) < domy(1)) then
-                            !     ! read(*,*)
-                            !     ! print*, 'affs'
-                            !     ! call list_remove(previous_node)
-                            !     print*, "Removido", ptr%p%n, "de malha", i,j
-                            !     print*, "Irá para", LT%lstrint_S(cont_int(2)+1:cont_int(2)+4), "cont", cont_int(1)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     !!!! ! print*, "L 590"
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! !     !!!! ! print*, "L 624"
-                            ! end if 
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
+
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
+                        end if 
+                        if (south == 'p' .and. cell(1) == 1) then
+                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
+ 
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
                         end if                        
 
                         !!! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO !!!
@@ -1345,6 +1198,45 @@ module fisica
                             cont_db(1) = cont_db(1) + 6
                             cont_int(1) = cont_int(1) + 4
                         end if
+
+                        ! CASO PERIODICO 
+
+                        if (east == 'p' .and. cell(2) == mesh(1)+1) then
+                            !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            ! 6 elementos
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2),x(2), &
+                                ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            ! 4 elementos
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
+                            ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+
+                        else if (west == 'p' .and. cell(2) == 2) then
+                            !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
+                            ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                        end if
+                        
+                        if (south == 'p' .and. cell(1) == mesh(2)+1) then
+                            !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrint_N(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+
+                        elseif (north == 'p' .and. cell(1) == 2) then
+                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_S(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
+                        !    print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(2) = cont_db(2) + 6
+                            cont_int(2) = cont_int(2) + 4
+                        end if
                        
                         previous_node => node
                         node => list_next(node)
@@ -1393,6 +1285,7 @@ module fisica
                 previous_node => node
                 node => list_next(node)
             end do
+            
             ! Segundo transfere para as celulas do domínio caso a partícula tenha mudado de processo
             if (domy(1) /= 1) i = domy(1) -1
             if (domy(2) /= mesh(2)+2) i = domy(2) +1
