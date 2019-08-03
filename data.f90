@@ -13,6 +13,7 @@ module data
         real(dp),dimension(2) :: F !força nela
         integer               :: grupo !grupo que a partícula pertence
         integer               :: n !numero da partícula
+        ! integer, dimension(2) :: mic !minimal image convenson (ajuda a contar quantas vezes a partcula atravessou a borda numa direção)
         logical               :: flag ! bandeira auxiliar
     end type data_t
 

@@ -33,75 +33,403 @@ module fisica
     end subroutine MaxwellBoltzmann
     
     !computa o potencial total 
-    function comp_pot(mesh,malha,propriedade,r_cut) result(V)
+    subroutine comp_pot(mesh,malha,propriedade,r_cut,domx,domy, ids, id, t, aux1, nRfu) 
+        !Computa e imprime o potencial e forças em cada partícula, intermoleculares
+
         use linkedlist
         use mod1
         use data
         use mod0
-        type(data_ptr) :: ptr, ptrn
+        use mpi
+        
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        real(dp) ::  rcut,r_cut
-        integer :: i,j
-        integer, intent(in) :: mesh(:)
-        real(dp) :: r, aux2(2),V, x1(2),x2(2),sigma, epsil
+        real(dp), intent(in) :: t
+        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
+        real(dp) :: x1(2),v1(2),x2(2),p1(2), rs1, rs2, coss, sine, u   
+        real(dp), intent(inout), allocatable, dimension(:) :: nRfu
+        integer :: i,j,ct = 0, n1, n2 !,ptr, ptrn
+        integer, intent(in) :: mesh(:),domx(2),domy(2)
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
         type(list_t), pointer :: node, next_node
-        V = 0
-        do i = 1,mesh(1)+2
-            do j = 1,mesh(2)+2
+        type(data_ptr) :: ptr,ptrn
+        integer ( kind = 4 ), intent(in) :: ids(8)
+        integer, intent(out) :: aux1 
+ 
+        aux1 = 1
+        !Lennard Jones
+        dox = domx 
+        doy = domy 
+        if (sum(ids(1:4)) > -4) then
+            !caso paralelo
+            if (domx(1) > 1) dox(1) = domx(1) - 1
+            if (domy(1) > 1) doy(1) = domy(1) - 1
+            if (domx(2) < mesh(1)+2) dox(2) = domx(2) + 1
+            if (domy(2) < mesh(2)+2) doy(2) = domy(2) + 1
+        else
+            dox = domx 
+            doy = domy 
+        end if 
+        
+        do i = doy(1),doy(2) ! i é linha
+            do j = dox(1),dox(2)
                 node => list_next(malha(i,j)%list)
+                if (associated(node)) then
+                    ptr = transfer(list_get(node), ptr)
+                    ! print*, "L 253", ptr%p%n
+                end if
                 do while (associated(node))
+                    ! print*, "Encontrada", ct, "celulas, id=", id
                     ptr = transfer(list_get(node), ptr) !particula selecionada
+                    ptr%p%flag = .true. ! indica ao comp_x que a partícula precisa ser calculada
                     x1 = ptr%p%x
+                    v1 = ptr%p%v
+                    n1 = ptr%p%n
+                    m1 = propriedade(ptr%p%grupo)%m
+                    p1 = [v1(1), v1(2)]*m1 
+                    rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
+                    fric_term1 = propriedade(ptr%p%grupo)%fric_term
+                    sigma_a = propriedade(ptr%p%grupo)%sigma
+                    ! rcut = r_cut*sigma
+                    epsil_a = propriedade(ptr%p%grupo)%epsilon 
+
+                    ! print '("x1  =", f10.6, " ", f10.6, " n ", i2, " cell ",i2," ",i2)',x1(1),x1(2), ptr%p%n,i,j
+                    ! if (id == 0) read(*,*)
                     !calcular a força desta com todas as outras partículas
                     next_node => list_next(node) ! próxima partícula da célula
                     node => list_next(node) ! a ser computado com a particula selecionada
+             
+                    ! NA PRÓPRIA CELULA 
                     do while (associated(node))
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                        sigma_b = propriedade(ptrn%p%grupo)%sigma
+                        epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                        rs2 = propriedade(ptrn%p%grupo)%rs 
+                        ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                        if (sigma_a > sigma_b) then
+                            rcut = r_cut*sigma_a + rs1 + rs2
+                            sigma = 0.5*(sigma_a + sigma_b)
+                            epsil = sqrt(epsil_a *epsil_b )
+                        else if (sigma_a < sigma_b) then 
+                            rcut = r_cut*sigma_b + rs1 + rs2
+                            sigma = 0.5*(sigma_a + sigma_b)
+                            epsil = sqrt(epsil_a *epsil_b )
+                        else 
+                            rcut = r_cut*sigma_a + rs1 + rs2
+                            sigma = sigma_a
+                            epsil = epsil_a
+                        end if 
                         x2 = ptrn%p%x
-                        sigma = propriedade(ptr%p%grupo)%sigma
-                        epsil = propriedade(ptr%p%grupo)%epsilon 
-                        rcut = sigma*r_cut
-                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
+                        n2 = ptrn%p%n
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                        coss = (x1(1)-x2(1))/r 
+                        sine = (x1(2)-x2(2))/r 
+                        r = r - rs1 - rs2 !raio
+                        ! print*, "L 389 r", r, "id",id
                         if (r <= rcut) then
-                            V = abs((sigma/r)**6*((sigma/r)**6-1)) + V
+                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                            u = 4*epsil*((sigma/r)**12 - (sigma/r)**6)  
+                            nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u, p1(1), p1(2)] &
+                            + nRfu(n1:n1+5)
+                            nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                            + nRfu(n2:n2+3)
+
                         end if
+                        aux1 = aux1 + 5
                         node => list_next(node) ! próxima partícula da célula
                     end do
 
-                    !Células ao redor 
-                    if (i /= mesh(1)+2) then
-                        if (j == mesh(2)+2) then
-                            node => list_next(malha(i+1,1)%list)
-                        else
-                            node => list_next(malha(i,j+1)%list)
-                        end if
-
-                        do while (associated(node))
-
-                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
-                            x2 = ptrn%p%x
-                            ! ! !print*, 'L120'
-                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)  !raio
-                            ! sigma = propriedade(ptr%p%grupo)%sigma
-                            ! epsilon = propriedade(ptr%p%grupo)%epsilon 
-                            ! rcut = sigma*rcut                            
-                            if (r <= rcut) then
-                                V = abs((sigma/r)**6*((sigma/r)**6-1)) + V
-                            end if
-                            node => list_next(node) ! próxima partícula da célula
+                    !Células ao redor  !i é linha, j é coluna
+                    if (i /= mesh(2)+2) then ! se não for a última linha
+                        if (j == mesh(1)+2) then ! se for a última coluna
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha apenas
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
+                                ! print*, "L 666 r", r, "id",id
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
+                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1:n1+3)
+                                    nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2:n2+3)
+                                end if
+                                node => list_next(node) ! próxima partícula da célula
+                            end do
                             
-                        end do
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
+                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                                    ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                    if (sigma_a > sigma_b) then
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else if (sigma_a < sigma_b) then 
+                                        rcut = r_cut*sigma_b + (rs1 + rs2)
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else 
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
+                                        sigma = sigma_a
+                                        epsil = epsil_a
+                                    end if 
+
+                                    x2 = ptrn%p%x
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                    coss = (x1(1)-x2(1))/r 
+                                    sine = (x1(2)-x2(2))/r 
+                                    r = r - rs1 - rs2 !raio
+                                    ! print*, "L 710 r", r, "id",id
+                                    if (r <= rcut) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
+
+                                        nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1:n1+3)
+                                        nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2:n2+3)
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula
+                                end do                            
+                            end if
+                        else
+                             !interagirá com a próxima linha e coluna, e na diagonal
+                            node => list_next(malha(i,j+1)%list) 
+                            
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term 
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
+                                ! print*, "L 757 r", r, "id",id
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+
+                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                    + nRfu(n1:n1+3)
+                                    nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                    + nRfu(n2:n2+3)
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha 
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
+                                ! print*, "L 798 r", r, "id",id
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                    nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1:n1+3)
+                                    nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2:n2+3)
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+                            
+                            node => list_next(malha(i+1,j+1)%list) !interagirá com a próxima linha e coluna
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                                ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                if (sigma_a > sigma_b) then
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else if (sigma_a < sigma_b) then 
+                                    rcut = r_cut*sigma_b + (rs1 + rs2)
+                                    sigma = 0.5*(sigma_a + sigma_b)
+                                    epsil = sqrt(epsil_a*epsil_b)
+                                else 
+                                    rcut = r_cut*sigma_a + (rs1 + rs2)
+                                    sigma = sigma_a
+                                    epsil = epsil_a
+                                end if 
+
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                coss = (x1(1)-x2(1))/r 
+                                sine = (x1(2)-x2(2))/r 
+                                r = r - rs1 - rs2 !raio
+                                ! print*, "L 841 r", r, "id",id
+                                if (r <= rcut) then
+                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1:n1+3)
+                                    nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2:n2+3)
+                                end if
+                                node => list_next(node) ! próxima partícula da célula                                
+                            end do
+                            
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
+                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                                    ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                                    if (sigma_a > sigma_b) then
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else if (sigma_a < sigma_b) then 
+                                        rcut = r_cut*sigma_b + (rs1 + rs2)
+                                        sigma = 0.5*(sigma_a + sigma_b)
+                                        epsil = sqrt(epsil_a*epsil_b)
+                                    else 
+                                        rcut = r_cut*sigma_a + (rs1 + rs2)
+                                        sigma = sigma_a
+                                        epsil = epsil_a
+                                    end if 
+
+                                    x2 = ptrn%p%x
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                                    coss = (x1(1)-x2(1))/r 
+                                    sine = (x1(2)-x2(2))/r 
+                                    r = r - rs1 - rs2 !raio
+                                    ! print*, "L 885 r", r, "id",id
+                                    if (r <= rcut) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                        nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                            + nRfu(n1:n1+3)
+                                        nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                            + nRfu(n2:n2+3)
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula
+                                end do                            
+                            end if
+                        end if
                         
+                    else ! se for a última lina, só interage com a celua ao lado 
+                        node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
+                        do while (associated(node))
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            sigma_b = propriedade(ptrn%p%grupo)%sigma
+                            epsil_b = propriedade(ptrn%p%grupo)%epsilon 
+                            rs2 = propriedade(ptrn%p%grupo)%rs 
+                            fric_term2 = propriedade(ptrn%p%grupo)%fric_term
+                            ! Lorenz-Betherlot rule for mixing epsilon sigma 
+                            if (sigma_a > sigma_b) then
+                                rcut = r_cut*sigma_a + (rs1 + rs2)
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else if (sigma_a < sigma_b) then 
+                                rcut = r_cut*sigma_b + (rs1 + rs2)
+                                sigma = 0.5*(sigma_a + sigma_b)
+                                epsil = sqrt(epsil_a*epsil_b)
+                            else 
+                                rcut = r_cut*sigma_a + (rs1 + rs2)
+                                sigma = sigma_a
+                                epsil = epsil__a
+                            end if 
+
+                            x2 = ptrn%p%x
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
+                            coss = (x1(1)-x2(1))/r 
+                            sine = (x1(2)-x2(2))/r 
+                            r = r - rs1 - rs2 !raio
+                            ! print*, "L 931 r", r, "id",id
+                            if (r <= rcut) then
+                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
+                                nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                    + nRfu(n1:n1+3)
+                                nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), -aux2(2)*r*coss, -aux2(1)*r*sine, u] & 
+                                    + nRfu(n2:n2+3)
+                            end if
+                            node => list_next(node) ! próxima partícula da célula                                
+                        end do
                     end if
-                    
+                    node => next_node
                 end do
             end do
         end do
-        
-        V = V*4*epsil        
-        
-    end function comp_pot    
+        aux1 = aux1 - 1
+    end subroutine comp_pot    
  
     function comp_Kglobal(malha,domx,domy,propriedade,np,id,t) result(K)
         use linkedlist
@@ -739,7 +1067,7 @@ module fisica
     end subroutine comp_F
     
     ! atualiza posições
-    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np)
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np)
         use linkedlist
         use mod1
         use data
@@ -750,6 +1078,7 @@ module fisica
         character(1) :: north, south, east, west
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer, intent(inout) :: mic(:)
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
@@ -1267,14 +1596,15 @@ module fisica
             if (domy(2) /= mesh(2)+2) i = domy(2)
             if (domx(1) /= 1) j = domx(1)
             if (domx(2) /= mesh(1) + 2) j = domx(2)
-            
 
             previous_node => malha(i,j)%list
             node => list_next(malha(i,j)%list)
 
-            if (associated(node)) ptr = transfer(list_get(node), ptr)
+            ! if (associated(node)) ptr = transfer(list_get(node), ptr) !para que isto?
             ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
             do while(associated(node))
+                ptr = transfer(list_get(node), ptr)
+                x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                 cell = [i, j]
                 ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                 LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
@@ -1294,9 +1624,11 @@ module fisica
         
             previous_node => malha(i,j)%list
             node => list_next(malha(i,j)%list)
-            if (associated(node)) ptr = transfer(list_get(node), ptr)
+            ! if (associated(node)) ptr = transfer(list_get(node), ptr)
             ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
             do while(associated(node))
+                ptr = transfer(list_get(node), ptr)
+                x = ptr%p%x
                 cell = [i, j]
                 ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                 LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
@@ -1307,7 +1639,229 @@ module fisica
                 previous_node => node
                 node => list_next(node)
             end do
-            ! Fim da trasnfefência para diagonal
+
+            !Caso Periódico. Só será necessário se os domínios dos processos formarem região 2x2 
+            if (wall == 'pppp') then
+                ! Primeiro transfere para as celulas emprestadas (periodico)
+                ! O x aqui tem outra função
+                !extremidades arestas norte e sul
+                if (domy(1) == 1) then
+                    i = domy(1) + 1
+                    x = [0.0_dp, icell(mesh(2)+1)]
+                    cell = [mesh(2)+2, 1]
+                end if
+                if (domy(2) == mesh(2)+2) then 
+                    i = domy(2) - 1
+                    x = [0.0_dp, -icell(mesh(2)+1)]
+                    cell = [1, 1]
+                end if
+                if (domx(1) /= 1) j = domx(1)  
+                if (domx(2) /= mesh(1) + 2) j = domx(2)
+                cell(2) = j
+
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+    
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
+                    ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+
+                !extremidades leste oeste
+                if (domy(1) /= 1) i = domy(1)
+                if (domy(2) /= mesh(2)+2) i = domy(2)
+                if (domx(1) == 1) then 
+                    j = 2
+                    x = [jcell(mesh(1)+2), 0.0_dp]
+                    cell = [i, mesh(1) + 2]
+                end if
+                if (domx(2) == mesh(1) + 2) then 
+                    j = domx(2) - 1
+                    x = [-jcell(mesh(1)+1), 0.0_dp]
+                    cell = [i, 1]
+                end if
+
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+    
+                if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
+                        ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+                
+                !extremidades nas pontas
+                if (domy(1) == 1) then
+                    i = domy(1) +1
+                    cell(1) = mesh(2) + 2
+                    x(2)  =  icell(mesh(2)+1)
+                end if
+                if (domy(2) == mesh(2)+2) then
+                    i = domy(2) - 1
+                    cell(1) = 1
+                    x(2)  =  - icell(mesh(2)+1)
+                end if
+                if (domx(1) == 1) then 
+                    j = domx(1)+1
+                    cell(2) = mesh(1) + 2
+                    x(1) = jcell(mesh(1)+1)
+                end if
+                if (domx(2) == mesh(1) + 2) then 
+                    j = domx(2)-1
+                    cell(2) = 1
+                    x(1) = - jcell(mesh(1)+2)
+                end if
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+    
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    cell = [i, j]
+                    ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
+                         ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+
+                ! Segundo transfere para as celulas do domínio caso a partícula tenha mudado de processo
+                ! (periodico)
+
+                ! norte e sul
+ 
+                if (domy(1) == 1) then
+                    i = domy(1)
+                    x = [0.0_dp, icell(mesh(2)+1)]
+                    cell = [mesh(2)+1, 1]
+                end if
+                if (domy(2) == mesh(2)+2) then     
+                    i = domy(2)
+                    x = [0.0_dp, -icell(mesh(2)+1)]
+                    cell = [1, 0]
+                end if
+                if (domx(1) /= 1) j = domx(1)   
+                if (domx(2) /= mesh(1) + 2) j = domx(2)  
+                cell(2) = j  
+            
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
+                         ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+
+                !extremidades leste oeste
+                if (domy(1) /= 1) i = domy(1)
+                if (domy(2) /= mesh(2)+2) i = domy(2)
+                if (domx(1) == 1) then 
+                    j = 1
+                    x = [jcell(mesh(1)+1), 0.0_dp]
+                    cell = [i, mesh(1) + 2]
+                end if
+                if (domx(2) == mesh(1) + 2) then 
+                    j = domx(2) 
+                    x = [-jcell(mesh(1)+1), 0.0_dp]
+                    cell = [i, 2]
+                end if
+            
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    cell = [i, j]
+                    ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
+                        ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+
+                !extremidades nas pontas
+                if (domy(1) == 1) then
+                    i = domy(1)
+                    cell(1) = mesh(2) + 2
+                    x(2)  =  icell(mesh(2)+1)
+                end if 
+                if (domy(2) == mesh(2)+2) i = domy(2)
+                    i = domy(2)
+                    cell(1) = 1
+                    x(2)  =  - icell(mesh(2)+1)
+                end if
+                if (domx(1) == 1) then 
+                    j = domx(1)
+                    cell(2) = mesh(1) + 2
+                    x(1) = jcell(mesh(1)+1)
+                end if
+                if (domx(2) == mesh(1) + 2) then 
+                    j = domx(2)
+                    cell(2) = 1
+                    x(1) = - jcell(mesh(1)+2)
+                end if
+            
+                previous_node => malha(i,j)%list
+                node => list_next(malha(i,j)%list)
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
+                do while(associated(node))
+                    ptr = transfer(list_get(node), ptr)
+                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    cell = [i, j]
+                    ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                    LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
+                        ptr%p%F(1),ptr%p%F(2)]
+                    LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    cont_db(destD) = cont_db(destD) + 6
+                    cont_int(destD) = cont_int(destD) + 4 
+                    previous_node => node
+                    node => list_next(node)
+                end do
+
+            ! Fim da transfência para diagonal
         end if
         
         ! print*, "L 854", id
@@ -1515,14 +2069,20 @@ module fisica
 
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        integer :: i,j
+        integer :: i,j, bsh(4)
         integer, intent(in) :: mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node 
         real(dp), intent(in) :: dt, t
         type(data_ptr) :: ptr
-        
-        do i = domy(1),domy(2)
-            do j = domx(1),domx(2)
+
+        bsh = [0,0,0,0]
+        if (domx(1) == 1) bsh(1) = 1
+        if (domx(2) == mesh(1)+2) bsh(2) = -1
+        if (domy(1) == 1) bsh(3) = 1
+        if (domy(2) == mesh(2)+2) bsh(4) = -1
+
+        do i = (domy(1)+bsh(3)), (domy(2)+bsh(4))
+            do j = (domx(1)+bsh(1)), (domx(2)+bsh(2))
                 node => list_next(malha(i,j)%list)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
@@ -1959,17 +2519,19 @@ program main
     use fisica
     use randnormal
     use mpi
+    use, intrinsic :: ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
+    use, intrinsic :: iso_fortran_env, only: real32
 
     implicit none
 !    Variáveis
-    integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2)
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init
+    integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2), aux3
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, print_TC
     integer, target :: k
-    real(dp), dimension(:,:), allocatable :: v, x, celula !força n e n+1, velocidades e posições
-    real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send !dimensões das celulas e vetor de resultado pra imprimir
+    real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
+    real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,vd(2)
     real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold
-    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)
+    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)) !, mic(:,:), mic_rcv(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
     type(list_t), pointer :: node
@@ -1989,7 +2551,11 @@ program main
     integer ( kind = 4 ) ierr
     integer ( kind = 4 ) np
     integer ( kind = 4 ) tag
-    integer ( kind = 4 ) id, ids(8)
+    integer ( kind = 4 ) id, ids(8) 
+    real(real32) :: nan
+
+    nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
+    
 
     ! depois ver se não da pra fazer tudo serialmente
     call MPI_Init ( ierr )
@@ -2050,6 +2616,8 @@ program main
         "Max Number of particles that will change process per iteraction")
     call CFG_add(my_cfg,"global%GField",(/0.0_dp, 0.0_dp/), &
         "Uniform Gravitational Field")
+    call CFG_add(my_cfg,"global%print_TC",1, &
+        "Print transport coefficient data")
    
     call CFG_read_file(my_cfg, "settings.ini")
     call CFG_get(my_cfg,"global%N",N)
@@ -2072,6 +2640,7 @@ program main
     call CFG_get(my_cfg,"global%vd",vd)
     call CFG_get(my_cfg,"global%NMPT",NMPT)
     call CFG_get(my_cfg,"global%GField",GField)
+    call CFG_get(my_cfg,"global%print_TC",print_TC)
     
 
     if (NMPT < 1) NMPT = N
@@ -2081,7 +2650,14 @@ program main
     allocate(v(N,2),x(N,2),grupo(N),interv(nimpre),interv_Td(nint(printstep)), & 
         jcell(mesh(2)+1),icell(mesh(1)+1),celula(N,2),propriedade(Ntype))
     allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
-    LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
+    LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4)) 
+
+    !if (wall == 'pppp') then 
+    !    allocate(mic(N))
+    !    mic = 0
+    !    if (id == 0) allocate(mic_rcv(N))
+    !end if
+
     ! allocate(nxv(N*5),nxv_send(N*5))
 
     aux2 = dimX/mesh(1)
@@ -2223,6 +2799,7 @@ program main
         ptr%p%grupo = grupo(k)
         ptr%p%F = [0,0] !passo 1 do SV
         ptr%p%n = k !identidade da partícula importante para imprimir
+        ! ptr%p%mic = [0,0]
         call list_insert(malha(i,j)%list, data=transfer(ptr, list_data)) 
     end do
     deallocate(grupo)
@@ -2449,6 +3026,57 @@ program main
             ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
             j = j+1
             deallocate(nxv,nxv_send)
+
+            if (print_TC == 1) then 
+                allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,5))
+                nRfu = nan
+                ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+                ! print*, 'MANDANDO PRINTAR', id, i
+                ! CONTINUAR DAQUI
+                call comp_pot(mesh,malha,propriedade,rcut,domx,domy, ids, id, t, aux1, nRfu)
+                ! ! ! print*, "L nxv_send", nxv_send  
+                !! print*, "LINKED 2 VEC, id", id, "aux1", aux1
+                if (np > 1) then ! paralelo
+                    aux3 = 1
+                    do ii = 1,N
+                        if (.not. isnan(nRfu(ii*6-5))) then
+                            nRfu_send(aux3:aux3+5) = nRfu(ii*6-5:ii*6)
+                            aux3 = aux3 + 6
+                        end if
+                    end do
+
+                    ! call MPI_GATHER(sbuf, scount, MPI_integer, rbuf, rcount, MPI_integer, root, MPI_COMM_WORLD, ierr)
+                    call MPI_GATHER(aux1,     1,    MPI_integer, rcounts, 1,   MPI_integer,  0,   MPI_COMM_WORLD, ierr)
+    
+                    ! print*, "Aux1 =", aux1, "id =", id
+                    ! if (id == 0) print*, "rcounts =", rcounts
+                    ! !print*, 'L IMPRE >', id
+                    displs = 0
+    
+                    if (id == 0) then
+                        do ii = 2,np
+                            displs(ii) = displs(ii-1) + rcounts(ii-1)
+                        end do
+                        ! print*, "displs", displs
+                    end if
+                    ! print*,'E_tot0 = ',(comp_pot(mesh,malha,propriedade,rcut) +comp_K(malha,mesh,propriedade))
+                    ! MPI_GATHERV    (sbuf,   scount,  stype, rbuf, rcounts,  displs,   rtype,  root,  comm,  ierr)
+                    call MPI_GATHERV(nRfu_send, aux1, MPI_DOUBLE_PRECISION, nRfu, rcounts, &
+                     displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+                end if 
+                
+                if (id == 0) then
+                    do ii = 0, N-1
+                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                    end do
+                    
+                    call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
+                    
+                end if 
+
+                deallocate(nRfu,nRfu_send,rFUp)
+            end if 
+
             allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
                  LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
         end if

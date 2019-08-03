@@ -23,10 +23,18 @@ module saida
             do i = 1,n
                 write(10,*) v(i,1),',',v(i,2)
             end do
-        else
+        else if (d == 3) then
             do i = 1,n
                 write(10,*) v(i,1),',',v(i,2),',',v(i,3)
             end do
+        else if (d == 4) then
+            do i = 1,n
+                write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',v(i,4)
+            end do
+        else if (d == 5) then 
+            do i = 1,n
+                write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',v(i,4),',',v(i,5)
+            end do          
         end if
         close(10)
 
