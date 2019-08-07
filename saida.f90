@@ -12,9 +12,15 @@ module saida
         character(4) :: extensao = '.csv', passo
         real(dp) :: time
         real(dp), save :: timep, etc, dtimepp
+        character(LEN=*),parameter :: fmt5 = '(f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
+        character(LEN=*),parameter :: fmt6 = '(f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
 
         write(passo,'(i0)') step
-        open(10,file='temp/'//prop//extensao//'.'//trim(passo),status="replace")
+        if (d <= 3) then
+            open(10,file='temp/'//prop//extensao//'.'//trim(passo),status="replace")
+        else
+            open(10,file='temp2/'//prop//extensao//'.'//trim(passo),status="replace")
+        end if
         if (d == 1) then
             do i = 1,n
                 write(10,*) v(i,1)
@@ -33,9 +39,14 @@ module saida
             end do
         else if (d == 5) then 
             do i = 1,n
-                write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',v(i,4),',',v(i,5)
+                write(10,fmt5) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5)
+            end do          
+        else if (d == 6) then 
+            do i = 1,n
+                write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
             end do          
         end if
+        
         close(10)
 
         if (prop == "position") then 

@@ -2,10 +2,10 @@
 # Defining variables
 objects = m_config.o linkedlist.o mod1.o saida.o lennard.o data.o mod0.o matprint.o randnormal.o 
 f90comp = mpiifort
-switch = -O3
+switch = -O3 -assume protect_parens,minus0 -prec-div -prec-sqrt 
 # Makefile
 execname: $(objects)
-	$(f90comp) -o lennard.out $(switch) $(objects)
+	$(f90comp) -o lennard $(switch) $(objects)
 randnormal.mod: randnormal.o randnormal.f90
 	$(f90comp) -c $(switch) randnormal.f90
 mod1.mod: mod1.o mod1.f90

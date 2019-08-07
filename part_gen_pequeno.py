@@ -86,6 +86,8 @@ for i in range(d1):
         p1[cont,:] = [i*spac+refe[0],j*spac+refe[1]]
         cont = cont+1   
 
+# np.random.shuffle(p1)        
+
 with open(arquivo1,'w') as file:
     for i in range(N):
         file.write('{},{}\n'.format(p1[i,0],p1[i,1]))

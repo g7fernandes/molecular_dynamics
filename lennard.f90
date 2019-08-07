@@ -33,7 +33,7 @@ module fisica
     end subroutine MaxwellBoltzmann
     
     !computa o potencial total 
-    subroutine comp_pot(mesh,malha,propriedade,r_cut,domx,domy, ids, id, t, aux1, nRfu) 
+    subroutine comp_pot(mesh,malha,propriedade,r_cut,domx,domy, ids, id, t, nRfu) 
         !Computa e imprime o potencial e forças em cada partícula, intermoleculares
 
         use linkedlist
@@ -44,19 +44,18 @@ module fisica
         
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        real(dp), intent(in) :: t
-        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
+        real(dp), intent(in) :: t,r_cut
+        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut, fric_term !fric_term = força de ficção
         real(dp) :: x1(2),v1(2),x2(2),p1(2), rs1, rs2, coss, sine, u   
         real(dp), intent(inout), allocatable, dimension(:) :: nRfu
         integer :: i,j,ct = 0, n1, n2 !,ptr, ptrn
-        integer, intent(in) :: mesh(:),domx(2),domy(2)
+        integer, intent(in) :: mesh(:),domx(2),domy(2), id
         real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
-        integer, intent(out) :: aux1 
+        
  
-        aux1 = 1
         !Lennard Jones
         dox = domx 
         doy = domy 
@@ -76,7 +75,6 @@ module fisica
                 node => list_next(malha(i,j)%list)
                 if (associated(node)) then
                     ptr = transfer(list_get(node), ptr)
-                    ! print*, "L 253", ptr%p%n
                 end if
                 do while (associated(node))
                     ! print*, "Encontrada", ct, "celulas, id=", id
@@ -98,10 +96,15 @@ module fisica
                     !calcular a força desta com todas as outras partículas
                     next_node => list_next(node) ! próxima partícula da célula
                     node => list_next(node) ! a ser computado com a particula selecionada
-             
-                    ! NA PRÓPRIA CELULA 
+
+                    if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                        nRfu(n1*6-5) = real(ptr%p%n,kind(0.d0))
+                    end if
+                    nRfu(n1*6-1:n1*6) = [p1(1), p1(2)] 
                     do while (associated(node))
+                        ! NA PRÓPRIA CELULA 
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                        ! print*, "L 108"
                         sigma_b = propriedade(ptrn%p%grupo)%sigma
                         epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                         rs2 = propriedade(ptrn%p%grupo)%rs 
@@ -126,17 +129,21 @@ module fisica
                         sine = (x1(2)-x2(2))/r 
                         r = r - rs1 - rs2 !raio
                         ! print*, "L 389 r", r, "id",id
+                        ! print*, "L 129"
                         if (r <= rcut) then
                             aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                             u = 4*epsil*((sigma/r)**12 - (sigma/r)**6)  
-                            nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u, p1(1), p1(2)] &
-                            + nRfu(n1:n1+5)
-                            nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                            + nRfu(n2:n2+3)
-
+                            nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                            + nRfu(n1*6-4:n1*6-2)
+                            nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                            + nRfu(n2*6-4:n2*6-2)
+                            if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                nRfu(n2*6-5) = real(n2,kind(0.d0))
+                            end if
+                            ! print*, "nrfu2", nRfu(n1*6-5:n1*6)
+                            !read(*,*)
                         end if
-                        aux1 = aux1 + 5
                         node => list_next(node) ! próxima partícula da célula
                     end do
 
@@ -165,6 +172,7 @@ module fisica
                                     epsil = epsil_a
                                 end if 
                                 x2 = ptrn%p%x
+                                n2 = ptrn%p%n
                                 r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
@@ -173,10 +181,13 @@ module fisica
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
-                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                        + nRfu(n1:n1+3)
-                                    nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                        + nRfu(n2:n2+3)
+                                    nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1*6-4:n1*6-2)
+                                    nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2*6-4:n2*6-2)
+                                    if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                        nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                    end if
                                 end if
                                 node => list_next(node) ! próxima partícula da célula
                             end do
@@ -205,6 +216,7 @@ module fisica
                                     end if 
 
                                     x2 = ptrn%p%x
+                                    n2 = ptrn%p%n
                                     r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                     coss = (x1(1)-x2(1))/r 
                                     sine = (x1(2)-x2(2))/r 
@@ -214,10 +226,13 @@ module fisica
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]
 
-                                        nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                        + nRfu(n1:n1+3)
-                                        nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                        + nRfu(n2:n2+3)
+                                        nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1*6-4:n1*6-2)
+                                        nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2*6-4:n2*6-2)
+                                        if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                            nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                        end if
                                     end if
                                     node => list_next(node) ! próxima partícula da célula
                                 end do                            
@@ -225,7 +240,6 @@ module fisica
                         else
                              !interagirá com a próxima linha e coluna, e na diagonal
                             node => list_next(malha(i,j+1)%list) 
-                            
                             do while (associated(node))
                                 ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
@@ -248,6 +262,7 @@ module fisica
                                 end if 
 
                                 x2 = ptrn%p%x
+                                n2 = ptrn%p%n
                                 r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
@@ -257,10 +272,13 @@ module fisica
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
 
-                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                    + nRfu(n1:n1+3)
-                                    nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                    + nRfu(n2:n2+3)
+                                    nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                    + nRfu(n1*6-4:n1*6-2)
+                                    nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                    + nRfu(n2*6-4:n2*6-2)
+                                    if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                        nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                    end if
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -287,6 +305,7 @@ module fisica
                                     epsil = epsil_a
                                 end if 
                                 x2 = ptrn%p%x
+                                n2 = ptrn%p%n
                                 r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
@@ -295,10 +314,13 @@ module fisica
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                        + nRfu(n1:n1+3)
-                                    nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                        + nRfu(n2:n2+3)
+                                    nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1*6-4:n1*6-2)
+                                    nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2*6-4:n2*6-2)
+                                    if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                        nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                    end if
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -326,6 +348,7 @@ module fisica
                                 end if 
 
                                 x2 = ptrn%p%x
+                                n2 = ptrn%p%n
                                 r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                 coss = (x1(1)-x2(1))/r 
                                 sine = (x1(2)-x2(2))/r 
@@ -334,10 +357,13 @@ module fisica
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                        + nRfu(n1:n1+3)
-                                    nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                        + nRfu(n2:n2+3)
+                                    nRfu(n1*6-4:n1*6-2) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                        + nRfu(n1*6-4:n1*6-2)
+                                    nRfu(n2*6-4:n2*6-2) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                        + nRfu(n2*6-4:n2*6-2)
+                                    if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                        nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                    end if
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -366,6 +392,7 @@ module fisica
                                     end if 
 
                                     x2 = ptrn%p%x
+                                    n2 = ptrn%p%n
                                     r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                                     coss = (x1(1)-x2(1))/r 
                                     sine = (x1(2)-x2(2))/r 
@@ -374,10 +401,13 @@ module fisica
                                     if (r <= rcut) then
                                         aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                        nRfu(n1:n1+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                            + nRfu(n1:n1+3)
-                                        nRfu(n2:n2+5) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
-                                            + nRfu(n2:n2+3)
+                                        nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                            + nRfu(n1*6-4:n1*6-2)
+                                        nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                            + nRfu(n2*6-4:n2*6-2)
+                                        if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                            nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                        end if
                                     end if
                                     node => list_next(node) ! próxima partícula da célula
                                 end do                            
@@ -408,6 +438,7 @@ module fisica
                             end if 
 
                             x2 = ptrn%p%x
+                            n2 = ptrn%p%n
                             r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
                             coss = (x1(1)-x2(1))/r 
                             sine = (x1(2)-x2(2))/r 
@@ -416,10 +447,13 @@ module fisica
                             if (r <= rcut) then
                                 aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                nRfu(n1:n1+3) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
-                                    + nRfu(n1:n1+3)
-                                nRfu(n2:n2+3) = [real(ptr%p%n,kind(0.d0)), -aux2(2)*r*coss, -aux2(1)*r*sine, u] & 
-                                    + nRfu(n2:n2+3)
+                                nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                    + nRfu(n1*6-4:n1*6-2)
+                                nRfu(n2*6-4:n2*6-2) = [-aux2(2)*r*coss, -aux2(1)*r*sine, u] & 
+                                    + nRfu(n2*6-4:n2*6-2)
+                                if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
+                                    nRfu(n2*6-5) = real(n2,kind(0.d0))
+                                end if
                             end if
                             node => list_next(node) ! próxima partícula da célula                                
                         end do
@@ -429,6 +463,8 @@ module fisica
             end do
         end do
         aux1 = aux1 - 1
+        ! print*, "ID, AUX1", id, aux1
+        ! print*, "FIM"
     end subroutine comp_pot    
  
     function comp_Kglobal(malha,domx,domy,propriedade,np,id,t) result(K)
@@ -651,7 +687,7 @@ module fisica
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
         real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2, coss, sine   
         integer :: i,j,ct = 0 !,ptr, ptrn
-        integer, intent(in) :: mesh(:),domx(2),domy(2)
+        integer, intent(in) :: mesh(:),domx(2),domy(2), id
         real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
@@ -675,10 +711,10 @@ module fisica
         do i = doy(1),doy(2) ! i é linha
             do j = dox(1),dox(2)
                 node => list_next(malha(i,j)%list)
-                if (associated(node)) then
-                    ptr = transfer(list_get(node), ptr)
-                    ! print*, "L 253", ptr%p%n
-                end if
+                ! if (associated(node)) then
+                !     ptr = transfer(list_get(node), ptr)
+                !     ! print*, "L 253", ptr%p%n
+                ! end if
                 do while (associated(node))
                     ! print*, "Encontrada", ct, "celulas, id=", id
                     ptr = transfer(list_get(node), ptr) !particula selecionada
@@ -1067,7 +1103,7 @@ module fisica
     end subroutine comp_F
     
     ! atualiza posições
-    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np)
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np)
         use linkedlist
         use mod1
         use data
@@ -1078,7 +1114,7 @@ module fisica
         character(1) :: north, south, east, west
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        integer, intent(inout) :: mic(:)
+        ! integer, intent(inout) :: mic(:)
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
@@ -1693,7 +1729,7 @@ module fisica
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
     
-                if (associated(node)) ptr = transfer(list_get(node), ptr)
+                ! if (associated(node)) ptr = transfer(list_get(node), ptr)
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
@@ -2531,7 +2567,7 @@ program main
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,vd(2)
     real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold
-    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:)) !, mic(:,:), mic_rcv(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
+    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:) !, mic(:,:), mic_rcv(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
     type(list_t), pointer :: node
@@ -2728,7 +2764,7 @@ program main
             do j = 1,quant
                 call CFG_get(my_cfg, particle//"%v", v(cont,:))    
                 grupo(cont) = i+1
-                read(20,*) x(cont,:) !,x(cont,2),x(cont,3)
+                read(20,*) x(cont,:) 
                 cont = cont+1
             end do
         end if
@@ -2921,10 +2957,10 @@ program main
     call clean_mesh(malha, mesh, domx, domy,id,.false.)
     ! print*, "bbb", id
   
-    if (id == 0) then
-        print*,'Press Return to continue'
-       read(*,*)
-    end if
+    ! if (id == 0) then
+    !     print*,'Press Return to continue'
+    !    read(*,*)
+    ! end if
     call MPI_barrier(MPI_COMM_WORLD, ierr)
     
     ! id = 0 é o processo raiz 
@@ -2939,6 +2975,11 @@ program main
         j = nimpre_init
         t = t_fim*nimpre_init/nimpre
         i = interv(j)
+    end if
+
+    if (print_TC == 1) then
+        allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,6))
+        call system('mkdir temp2')
     end if
 
     do while (t_fim > t)
@@ -3024,33 +3065,28 @@ program main
             end if
             ! if (id == 0) read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
-            j = j+1
+            
             deallocate(nxv,nxv_send)
 
             if (print_TC == 1) then 
-                allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,5))
-                nRfu = nan
-                ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
-                ! print*, 'MANDANDO PRINTAR', id, i
-                ! CONTINUAR DAQUI
-                call comp_pot(mesh,malha,propriedade,rcut,domx,domy, ids, id, t, aux1, nRfu)
-                ! ! ! print*, "L nxv_send", nxv_send  
+                nRfu = 0.0_dp
+
+                call comp_pot(mesh,malha,propriedade,rcut,domx,domy, ids, id, t, nRfu) 
+
                 !! print*, "LINKED 2 VEC, id", id, "aux1", aux1
                 if (np > 1) then ! paralelo
                     aux3 = 1
                     do ii = 1,N
-                        if (.not. isnan(nRfu(ii*6-5))) then
+                        if (nRfu(ii*6-5) /= 0) then
                             nRfu_send(aux3:aux3+5) = nRfu(ii*6-5:ii*6)
                             aux3 = aux3 + 6
                         end if
                     end do
+                    aux1 = aux3 -1
 
                     ! call MPI_GATHER(sbuf, scount, MPI_integer, rbuf, rcount, MPI_integer, root, MPI_COMM_WORLD, ierr)
                     call MPI_GATHER(aux1,     1,    MPI_integer, rcounts, 1,   MPI_integer,  0,   MPI_COMM_WORLD, ierr)
     
-                    ! print*, "Aux1 =", aux1, "id =", id
-                    ! if (id == 0) print*, "rcounts =", rcounts
-                    ! !print*, 'L IMPRE >', id
                     displs = 0
     
                     if (id == 0) then
@@ -3059,37 +3095,49 @@ program main
                         end do
                         ! print*, "displs", displs
                     end if
-                    ! print*,'E_tot0 = ',(comp_pot(mesh,malha,propriedade,rcut) +comp_K(malha,mesh,propriedade))
+                    ! if (id == 0) then 
+                    !     print*, "L 3099"
+                    !     read(*,*)
+                    ! end if
+                    ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+
                     ! MPI_GATHERV    (sbuf,   scount,  stype, rbuf, rcounts,  displs,   rtype,  root,  comm,  ierr)
                     call MPI_GATHERV(nRfu_send, aux1, MPI_DOUBLE_PRECISION, nRfu, rcounts, &
                      displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                 end if 
-                
+                ! print*, "AA"          
+
                 if (id == 0) then
                     do ii = 0, N-1
-                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                        ! print*, [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+1),nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                     end do
-                    
-                    call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
+                    ! print*, "AAA"
+                    call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)
                     
                 end if 
-
-                deallocate(nRfu,nRfu_send,rFUp)
+                ! print*, "B"
+                ! read(*,*)
+                ! deallocate(nRfu,nRfu_send,rFUp)
+                ! print*, "C"
             end if 
-
             allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
-                 LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
+            LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
+            j = j+1
         end if
         i = i+1
         ! print*, "L 1754 >", id
         ! if (id  == 0) read(*,*)    
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        ! print*, t
     end do
 
-    ! print*, 'L 2112', id 
     call clean_mesh(malha, mesh, domx, domy,id,.true.)
     deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
             LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
+    ! print*, 'L 3104'
+    ! if (print_TC == 1) deallocate(nRfu,nRfu_send,rFUp)
+    
     if (id == 0)  then
         call cpu_time(finish)
         print '("Time = ",f10.3," seconds.")',(finish-start)

@@ -13,6 +13,7 @@ from evtk.hl import pointsToVTK
 import numpy as np
 import csv, os, shutil
 import configparser
+from zipfile import ZipFile
 try:
     import progressbar
     pbar = True 
@@ -28,13 +29,14 @@ aux = True
 folder = 'result'
 i = 1
 
+
 while aux:
     try:
         os.mkdir(folder)
         aux = False
     except FileExistsError:
         print('Folder {} exists'.format(folder))
-        opt = input('Overwrite? [y/n]')
+        opt = input('Overwrite? [y/n] ')
         if opt == 'y' or 'opt' == 'Y':
             aux =False 
         else:
@@ -54,6 +56,7 @@ print('Reading settings.ini')
 N = int(config['global']['N'].split()[0])
 nimpre =  int(config['global']['nimpre'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
+print_TC = int(config['global']['print_TC'].split()[0])
 quant = []
 rs = [] # raio sólido
 sigma = []
@@ -82,11 +85,6 @@ for i in range(len(quant)):
         rsol[j+k] = rs[i]
     k = sum(quant[0:i+1])
         
-
-# a = input("a")
-# for i in range(len(rsol)):
-#     print("{} {}".format(i,rsol[i]))
-
 # Ler os arquivos e colocá-los em vetores
 
 x = np.zeros(N)
@@ -103,9 +101,12 @@ cz = np.zeros(N)
 
 nID = np.linspace(1,N,N)
 
+zip_positions = ZipFile(via+'/'+folder+'/positions.zip','w')
+zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','w')
+
 print('Converting...')
 if pbar:
-    bar = progressbar.ProgressBar(max_value=nimpre)
+    bar = progressbar.ProgressBar(max_value=nimpre+1)
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
         csv_lector = csv.reader(file_locus,delimiter = ',')
@@ -114,8 +115,8 @@ for fnum in range(0,nimpre+1):
             x[i] = linea[0]
             y[i] = linea[1]
             i = i+1
-    shutil.move(via+'/temp/position.csv.'+str(fnum),via+'/'+folder+'/position.csv.'+str(fnum)) 
-    
+    zip_positions.write(via+'/temp/position.csv.'+str(fnum), 'position.csv.'+str(fnum))
+    # shutil.move(via+'/temp/position.csv.'+str(fnum),via+'/'+folder+'/position.csv.'+str(fnum)) 
     with open('temp/velocity.csv.'+str(fnum),encoding='utf-8') as file_velocitas:
         csv_lector = csv.reader(file_velocitas,delimiter = ',')
         i = 0
@@ -124,7 +125,8 @@ for fnum in range(0,nimpre+1):
             vy[i] = linea[1]
             
             i = i+1
-    shutil.move(via+'/temp/velocity.csv.'+str(fnum),via+'/'+folder+'/velocity.csv.'+str(fnum))
+    zip_velocities.write(via+'/temp/velocity.csv.'+str(fnum),'velocity.csv.'+str(fnum))
+    # shutil.move(via+'/temp/velocity.csv.'+str(fnum),via+'/'+folder+'/velocity.csv.'+str(fnum))
 
     fin = 0
     grupo = 0
@@ -144,8 +146,21 @@ for fnum in range(0,nimpre+1):
 
     if pbar:
         bar.update(fnum)
+
+
+zip_positions.close()
+zip_velocities.close()
+
 shutil.rmtree('temp')
-        
+
+if print_TC == 1:
+    a = os.listdir('temp2')
+    zip_rFup = ZipFile(via+'/'+folder+'/rFuP.zip','w')
+    for f in a:
+        zip_rFup.write(via+'/temp2/'+f,f)
+        # shutil.move(via+'/temp2/'+f,via+'/'+folder + '/' + f)
+    zip_rFup.close()
+    shutil.rmtree('temp2')
         
 with open("settings.txt","a") as settingstxt:
     settingstxt.write("[out_files]\n")
@@ -168,6 +183,7 @@ else:
     with open('.gitignore','a+') as file:
         file.write(folder+'\n')
 
+ 
     #with open('cell.csv.'+str(fnum),encoding='utf-8') as file_velocitas:
         #csv_lector = csv.reader(file_velocitas,delimiter = ',')
         #i = 0
