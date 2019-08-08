@@ -73,7 +73,7 @@ with zip_velocities.open('velocity.csv.'+step) as file:
 #         velocities.append(line)
 
 # verificar se não é desejavel fazer backup de arquivos de posição e velocidade
-a == 'n'
+a = 'n'
 i = 0
 for f in x_files + v_files:
     if os.path.isfile(f) and a == 'n':

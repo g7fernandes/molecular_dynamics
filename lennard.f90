@@ -18,7 +18,6 @@ module fisica
 
         do i = 2,mesh(2)+1
             do j = 2,mesh(1)+1
-               ! print *, 'posição', i, ',', j
                 node => list_next(malha(i,j)%list)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
@@ -535,19 +534,14 @@ module fisica
         integer ( kind = 4 ) :: np, id
         real(dp), intent(in) :: tt
         !calcula temperatura atual
-        T = (2/(3*kb))*comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
+        ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
+        T = (2/(2*kb))*comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
 
-        ! print*, "T =", T, "Td =", Td
-        ! if (id  == 0) read(*,*)    
-        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         beta = sqrt(Td/T) ! aqui o T é o Beta
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
                ! print *, 'posição', i, ',', j
                 node => list_next(malha(i,j)%list)
-                !  print*, i,j
-                !  print*, 'is associated?', associated(node)
-                !  print*, associated(node)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
                     if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
@@ -628,9 +622,9 @@ module fisica
         integer ( kind = 4 ) :: np, id
         real(dp), intent(in) :: tt
         !calcula temperatura atual
-
-        T_hot = (2/(3*kb))*comp_K(malha,domx,domy,hot_cells,propriedade,np,id,tt)
-        T_cold = (2/(3*kb))*comp_K(malha,domx,domy,cold_cells,propriedade,np,id,tt)
+        ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
+        T_hot =  comp_K(malha,domx,domy,hot_cells,propriedade,np,id,tt)
+        T_cold = comp_K(malha,domx,domy,cold_cells,propriedade,np,id,tt)
         ! print*, "T =", T, "Td =", Td
         ! if (id  == 0) read(*,*)    
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
@@ -2803,7 +2797,7 @@ program main
     i = 0
     
     if (Td == 0) then
-        Td = (2/(3*N*kb))*sum(0.5*propriedade(ptr%p%grupo)%m*(v(:,1)**2+v(:,2)**2))
+        Td = (2/(2*N*kb))*sum(0.5*propriedade(ptr%p%grupo)%m*(v(:,1)**2+v(:,2)**2))
     else if (Td < 0 .and. (Td_hot*Td_hot) <= 0) then
         interv_Td = -1
     end if
@@ -2841,7 +2835,8 @@ program main
     deallocate(grupo)
 
     ! adiciona às particulas velocidade inicial de acordo com distribuição maxwell boltzmann
-    if (vd(1) /= 0 .and. vd(2) /= 0 .and. vd(1) /= 0) call MaxwellBoltzmann(malha,mesh,sqrt(vd))
+    if (vd(1) /= 0 .and. vd(2) /= 0) call MaxwellBoltzmann(malha,mesh, vd)
+    if (vd(1) == 0 .and. vd(2) == 0 .and. Td > 0) call MaxwellBoltzmann(malha,mesh,sqrt([Td,Td]))
 
     ! adicionamos uma celula para corrigir o fato de estarmos usando fantasmas
     cold_cells = cold_cells + 1

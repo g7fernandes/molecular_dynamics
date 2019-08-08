@@ -46,7 +46,7 @@ while aux:
                 aux = True
                 i = i+1       
 
-print('The results will be saved at {}'.format(folder))
+print('\nThe results will be saved at {}\n'.format(folder))
 
 #Ler a quantidade de arquivos de settings.
 

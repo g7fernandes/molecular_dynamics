@@ -1,0 +1,37 @@
+Equações adimensionais para MD
+m' = adimensional
+m* = valor dimensional de referência
+[] vetor
+
+m' = m/m* (massa)
+sigma' = sigma/sigma* (distância)
+epsilon' = epsion/epsilon* (energia = força*[distância]) No caso do LJ, epsilon*[distância]/distância^2 = força
+[xi'] = [xi]/sigma* (distância)
+Dimensões:
+
+comprimento    sigma (LJ)
+energia        epsilon (LJ)
+massa          m
+Velocidade     sqrt(epsilon/m)
+força          epsilon/sigma 
+pressão        epsilon/sigma^3
+temperatura    epsilon*k_b
+
+Adimensionais
+
+[rij] = [rij]/sigma*
+T' = T*k_b/epsilon
+E' = E/epsilon*
+V' = V/epsilon* (energia potencial) 
+t' = t/alpha com alpha = sqrt( (m^2*sigma^2/epsilon*) )
+
+O que dá pra fazer aqui para admensionalizar. 
+Escolher uma das particulas como referência, esta terá valores de
+sigma, m, epsilon = 1 
+A velocidade das partículas determinada por T ou E será o que fará as particulas
+se aglutinarem mais ou menos. 
+
+
+
+Ek =  T'* epsilon 
+T' = Ek/epsilon (numero grande) = Ek'
