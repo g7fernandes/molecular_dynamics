@@ -14,6 +14,7 @@ import numpy as np
 import csv, os, shutil
 import configparser
 from zipfile import ZipFile
+import time
 try:
     import progressbar
     pbar = True 
@@ -146,6 +147,8 @@ for fnum in range(0,nimpre+1):
 
     if pbar:
         bar.update(fnum)
+    if fnum == nimpre+1:
+        time.sleep(0.1)
 
 
 zip_positions.close()

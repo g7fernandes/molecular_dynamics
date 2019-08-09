@@ -535,7 +535,7 @@ module fisica
         real(dp), intent(in) :: tt
         !calcula temperatura atual
         ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
-        T = (2/(2*kb))*comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
+        T = comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
 
         beta = sqrt(Td/T) ! aqui o T é o Beta
         do i = domy(1),domy(2)
@@ -1278,7 +1278,6 @@ module fisica
             do j = dx1,dx2
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
-                ! print*, i,j, "id", id
                  ! ptr%p%flag = true significa que ainda não foi computado para evitar loop infinito
                 
                 if (associated(node))  then
@@ -1288,8 +1287,6 @@ module fisica
                 do while (associated(node) .and. ptr%p%flag)
                     ! print*, "L PART", i,j, "id", id   
                     m = propriedade(ptr%p%grupo)%m
-                    ! print*, 'grupo =', ptr%p%grupo, 'massa=', m
-                    ! ptr = transfer(list_get(node), ptr)
                     ! aqui vemos se já passou o tempo que as posições ficaram travadas. 
                     if (propriedade(ptr%p%grupo)%x_lockdelay > t) ptr%p%flag = .false. 
                          
@@ -2836,8 +2833,10 @@ program main
 
     ! adiciona às particulas velocidade inicial de acordo com distribuição maxwell boltzmann
     if (vd(1) /= 0 .and. vd(2) /= 0) call MaxwellBoltzmann(malha,mesh, vd)
-    if (vd(1) == 0 .and. vd(2) == 0 .and. Td > 0) call MaxwellBoltzmann(malha,mesh,sqrt([Td,Td]))
-
+    if (vd(1) == 0 .and. vd(2) == 0 .and. Td > 0) then
+        vd = sqrt([Td, Td])
+        call MaxwellBoltzmann(malha,mesh,vd)
+    end if 
     ! adicionamos uma celula para corrigir o fato de estarmos usando fantasmas
     cold_cells = cold_cells + 1
     hot_cells = hot_cells + 1
