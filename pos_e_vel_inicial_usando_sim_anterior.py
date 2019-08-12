@@ -48,7 +48,7 @@ for i in range(ntype):
         v_files[-1]  = v_files[-1][1:len(v_files[-1])-1]
     except:
         print("no velocity file used")
-        v_files.append('v_file_'+str(i))
+        v_files.append('v_file_'+str(i)+'.csv')
         pass 
     
 step = input('Extract step no. (max {}) '.format(nimpre-1))

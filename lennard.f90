@@ -1385,14 +1385,7 @@ module fisica
                             !     ! read(*,*)
                             !     print*, "Removido", ptr%p%n, "de malha", i,j
                             !     print*, "Irá para", LT%lstrint_E
-                                
-                            !     ! call list_remove(previous_node)
-                            !     ! print*, 'affs'
-                            !     ! node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
+
                             cont_db(3) = cont_db(3) + 6
                             cont_int(3) = cont_int(3) + 4
                         end if 
@@ -1408,13 +1401,7 @@ module fisica
                             !     ! print*, "Removido", ptr%p%n, "de malha", i,j
                             !     print*, "Removido", ptr%p%n, "de malha", i,j
                             !     print*, "Irá para", LT%lstrint_W
-                                
-                            ! !     call list_remove(previous_node)
-                            ! !     node => list_next(previous_node)
-                            ! ! else 
-                            ! !     call list_change(previous_node,malha(cell(1),cell(2))%list)
-                            ! !     node => list_next(previous_node)
-                            ! end if 
+        
                             cont_db(4) = cont_db(4) + 6
                             cont_int(4) = cont_int(4) + 4
                         end if 
@@ -1608,7 +1595,6 @@ module fisica
         ! if (id == 0) read(*,*) 
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         if (np > 1 .and. sum(ids(5:8)) > -4) then
-            
             do i = 5,8
                 !identifica qual o processo na diagonal
                 if (ids(i) > -1) then
@@ -1916,6 +1902,8 @@ module fisica
                 call MPI_SEND(LT%lstrint_D, cont_int(destD), MPI_integer, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if
 
+            cont_db = 0
+            cont_int = 0
             ! print*, "L 935 TUDO ENVIADO", id
             tag = 1
             if (ids(1) >= 0) then  
@@ -1999,9 +1987,11 @@ module fisica
                 end do
             end if
 
+            ! print*, "cont db", cont_db
+
             ! if (id == 0)  read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-
+            ! print*, "Tudo recebido", id
             !  call MPI_barrier(MPI_COMM_WORLD, ierr)
             !  print*, 'ID APOS BARREIRA', id
             ! print*, "L 1033"
@@ -2027,16 +2017,16 @@ module fisica
                         
                     end if
                     if (j == 2  .and. cont_db(2) > 0) then
-                        ! print*, "LA 1151"
+                        ! print*, "LA 1151", id
                         allocate(ptr%p)
-                        !! ! print*, "L 859 <<<"
+                        ! print*, "L 859 <<<", id
                         ptr%p%x = LT%lstrdb_S(i*6+1:i*6+2)
                         ptr%p%v = LT%lstrdb_S(i*6+3:i*6+4)
                         ptr%p%grupo = LT%lstrint_S(i*4+4) 
                         ptr%p%F = LT%lstrdb_S(i*6+5:i*6+6)
                         ! ! print*, "L FORÇÆ", ptr%p%F
                         ptr%p%n = LT%lstrint_S(i*4+3) !identidade da partícula importante para imprimir
-                        !! ! print*, "L 865 <<<", LT%lstrint_S
+                        ! print*, "L 865 <<<", LT%lstrint_S(i*6+1:i*6+6)
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
                         ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
@@ -2077,7 +2067,7 @@ module fisica
                     end if  
                 end do
             end do   
-            ! print*, "L 1106"
+            ! print*, "Tudo Alocado"
               ! if (id == 0) read(*,*) 
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         end if
@@ -2877,6 +2867,7 @@ program main
         suby = 1
     end if  
 
+    print*, 'subx', subx, 'suby', suby
     np = subx*suby
     ids = [-1,-1,-1,-1,-1,-1,-1,-1]
 
@@ -2972,7 +2963,7 @@ program main
     end if
 
     if (print_TC == 1) then
-        allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,6))
+        allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,6))
         call system('mkdir temp2')
     end if
 
@@ -3104,10 +3095,10 @@ program main
                 if (id == 0) then
                     do ii = 0, N-1
                         ! print*, [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
-                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+1),nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                     end do
                     ! print*, "AAA"
-                    call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)
+                    call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
                     
                 end if 
                 ! print*, "B"

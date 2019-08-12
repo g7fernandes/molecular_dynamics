@@ -107,7 +107,7 @@ zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','w')
 
 print('Converting...')
 if pbar:
-    bar = progressbar.ProgressBar(max_value=nimpre+1)
+    bar = progressbar.ProgressBar(max_value=nimpre-1)
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
         csv_lector = csv.reader(file_locus,delimiter = ',')
