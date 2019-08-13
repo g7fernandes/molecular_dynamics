@@ -5,6 +5,7 @@ import configparser
 import matplotlib.pyplot as plt
 from glob import glob
 import time
+from zipfile import ZipFile
 try:
     import progressbar
     pbar = True 
@@ -48,6 +49,10 @@ for a in range(len(dirlist)):
     print("{} | {}\n".format(a,dirlist[a]))
 a = int(input("Enter the number of the folder\n"))
 res_dir = dirlist[a]
+
+zip_rfup = ZipFile(res_dir+'/rFuP.zip','r')
+zip_positions = ZipFile(res_dir+'/positions.zip','r')
+zip_velocities = ZipFile(res_dir+'/velocities.zip','r')
 
 config = configparser.ConfigParser()
 config.read(res_dir + 'settings.txt')
@@ -121,8 +126,10 @@ while step <= nsteps:
     p0 = []
 
     particle_map = [[[] for _ in range(mesh[1])] for _ in range(mesh[0])]
-    pos = pd.read_csv(res_dir+"position.csv."+str(step), header=None, names = ["x","y"])
-    vel = pd.read_csv(res_dir+"velocity.csv."+str(step), header=None, names = ["v_x", "v_y"])
+    rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["RxFy","RyFx","u","px","py"])
+    pos = pd.read_csv(zip_positions.open("position.csv."+str(step)), header=None, names = ["x","y"])
+    vel = pd.read_csv(zip_velocities.open("velocity.csv."+str(step)), header=None, names = ["v_x", "v_y"])
+
     n = [x for x in range(len(pos))]
     n = pd.DataFrame(n, columns=["n"]) # numero id da partícula
     pos_vel = pd.concat([n,pos,vel,tipo],axis=1)
@@ -146,16 +153,13 @@ while step <= nsteps:
                 n1 = particle_map[i][j][nn]
                 r0.append([pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']])
                 m = mass[pos_vel.loc[n1,'tipo']]
-                p0.append([pos_vel.loc[n1,'v_x']*m, pos_vel.loc[n1,'v_y']*m])
+                p0.append([pos_vel.loc[n1,'px'], pos_vel.loc[n1,'py']])
                 KE[step] += np.sqrt(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2)*m/nparcl
-
-
-
-                
-    r0 = np.array(r0)
-    p0 = np.array(p0)
-    Qxy[step] += np.sum(r0[:,0]*p0[:,1], axis=0)/Vol 
-    Qyx[step] += np.sum(r0[:,1]*p0[:,0], axis=0)/Vol
+   
+    r_0 = np.array(r0)
+    p_0 = np.array(p0)
+    Qxy[step] += np.sum(r_0[:,0]*p_0[:,1], axis=0)/Vol 
+    Qyx[step] += np.sum(r_0[:,1]*p_0[:,0], axis=0)/Vol
     if pbar:
         bar.update(step)
     step += 1
@@ -163,18 +167,19 @@ while step <= nsteps:
 KE2 = np.sum(KE[1:])/len(KE[1:])
 na = int(input('Enter de number of assembles (na) to average.\nThe number of steps for correlation will be nsteps/na: '))
 
-etaxy2t = einstein_relation(Qxy,na)/Vol
-etayx2t = einstein_relation(Qyx,na)/Vol
+etaxyt = einstein_relation(Qxy,na)*Vol/(2*KE2)
+etayxt = einstein_relation(Qyx,na)*Vol/(2*KE2)
 
-aux = len(etaxy2t)
+aux = len(etaxyt)
 t = np.linspace(0,t_fim/na,aux)
 plt.figure(1)
-plt.plot(t,etaxy2t,'.r', label='etaxy*t')
-m,b = np.polyfit(t, etaxy2t, 1)
+plt.plot(t,etaxyt,'.r', label='etaxy*t')
+m,b = np.polyfit(t, etaxyt, 1)
 y = m*t + b 
 plt.plot(t,y,'-r', label='etaxy*t fit')
-plt.plot(t,etayx2t,'.b', label='etayx')
-m,b = np.polyfit(t[int(aux/2):], etayx2t[int(aux/2):], 1)
+plt.plot(t,etayxt,'.b', label='etayx')
+m,b = np.polyfit(t[int(
+    /2):], etayxt[int(aux/2):], 1)
 y = m*t + b 
 plt.plot(t,y,'-b', label='etaxy*t fit')
 print("eta = {}".format(m[0]))

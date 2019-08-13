@@ -5,6 +5,8 @@ import configparser
 import matplotlib.pyplot as plt
 from glob import glob
 import time
+from zipfile import ZipFile
+
 try:
     import progressbar
     pbar = True 
@@ -17,20 +19,7 @@ except:
 kB = 1.38064852*10**-23
 
 def integral(F,i,j,dt):
-    # sh = np.shape(F)
     I = np.trapz(F[i,j,:],dx=dt)                
-    # I = np.zeros((sh[0],sh[1]))
-    # xi = [-np.sqrt(3/5), 0, np.sqrt(3/5)]
-    #xp = np.linspace(0, dt*sh[2], sh[2])
-    #w = [5/9, 8/9, 5/9]
-    # for i in range(sh[0]):
-    #     for j in range(sh[1]):
-            # for s in range(sh[2]-1):
-                # I[i,j] += 0.5*(dt)*( \
-                #     w[0]*np.interp( dt*xi[0]/2 + ((s+1)*dt+s*dt)/2 , xp, F[i,j,:]) + \
-                #     w[1]*np.interp( dt*xi[0]/2 + ((s+1)*dt+s*dt)/2  , xp, F[i,j,:]) + \
-                #     w[2]*np.interp( dt*xi[0]/2 + ((s+1)*dt+s*dt)/2  , xp, F[i,j,:]) \
-                #     )
     return I
 
 def diff1(F,h):
@@ -82,6 +71,12 @@ for a in range(len(dirlist)):
     print("{} | {}\n".format(a,dirlist[a]))
 a = int(input("Enter the number of the folder\n"))
 res_dir = dirlist[a]
+
+zip_rfup = ZipFile(res_dir+'/rFuP.zip','r')
+zip_positions = ZipFile(res_dir+'/positions.zip','r')
+zip_velocities = ZipFile(res_dir+'/velocities.zip','r')
+
+len_list_files =  len(zip_positions.namelist()+zip_velocities.namelist())
 
 config = configparser.ConfigParser()
 config.read(res_dir + 'settings.txt')
@@ -145,11 +140,12 @@ if pbar:
 while step <= nsteps: 
     particle_map = [[[] for _ in range(mesh[1])] for _ in range(mesh[0])]
 
-    pos = pd.read_csv(res_dir+"position.csv."+str(step), header=None, names = ["x","y"])
-    vel = pd.read_csv(res_dir+"velocity.csv."+str(step), header=None, names = ["v_x", "v_y"])
+    rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["RxFy","RyFx","u","px","py"])
+    pos = pd.read_csv(zip_positions.open("position.csv."+str(step)), header=None, names = ["x","y"])
+    vel = pd.read_csv(zip_velocities.open("velocity.csv."+str(step)), header=None, names = ["v_x", "v_y"])
     n = [x for x in range(len(pos))]
     n = pd.DataFrame(n, columns=["n"]) # numero id da partícula
-    pos_vel = pd.concat([n,pos,vel,tipo],axis=1)
+    pos_vel = pd.concat([n,pos,vel,tipo,rfup],axis=1)
     
     for nn in range(len(pos_vel)):
         xp = int(pos_vel.loc[nn,'x']//hx)
@@ -161,143 +157,16 @@ while step <= nsteps:
         particle_map[xp][yp].append( pos_vel.loc[nn,'n'] )
         density_map[xp,yp,step] += 1
     
+    # usando rfup:
 
     for i in range(region[0],region[1]):
         for j in range(region[2],region[3]):
             for nn in range(len(particle_map[i][j])):
-                # print("i = {}, j = {}, nn = {}".format(i,j,nn))
                 n1 = particle_map[i][j][nn]
-                ep1 = epsilon[pos_vel.loc[n1,'tipo']]
-                sigma1 = sigma[pos_vel.loc[n1,'tipo']]
-                rs1 = rs[pos_vel.loc[n1,'tipo']]
                 m = mass[pos_vel.loc[n1,'tipo']]
-                x1 = np.array([pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']])
-                tauxyk[i,j,step] += -m*pos_vel.loc[n1,'v_x']*pos_vel.loc[n1,'v_y'] # falta multiplicar por 1/Volume
-                KE[i,j,step] += m*np.sqrt(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2)
-                e[n1] = m*(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2) 
-                # na própria célula 
-                for nn2 in range(nn+1,len(particle_map[i][j])):
-                    n2 = particle_map[i][j][nn2]
-                    rs2 = rs[pos_vel.loc[n2,'tipo']]
-                    ep2 = epsilon[pos_vel.loc[n2,'tipo']]
-                    sigma2 = sigma[pos_vel.loc[n2,'tipo']]
-                    ep = np.sqrt(ep1*ep2)
-                    s = 0.5*(sigma2 + sigma1)
-                    x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
-                    r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2)
-                    if r == 0:
-                        print('nn {} {}'.format(nn,nn2))
-                        print('x1 = {} {} | x2 = {} {}'.format(x1[0],x1[1],x2[0],x2[1]))
-                        time.sleep(2)
-                    coss = (x1[0]-x2[0])/r 
-                    sine = (x1[1]-x2[1])/r 
-                    r = r - rs1 - rs2
-                    aux1 = 4*ep*((s/r)**12-(s/r)**6)
-                    e[n1] += aux1
-                    e[n2] += aux1
-                    F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
-                    tauxyp[i,j,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
-                # na celula vizinha i+1, j 
-                if i+1 < region[1]:
-                    for nn2 in range(1,len(particle_map[i+1][j])):
-                        n2 = particle_map[i+1][j][nn2]
-                        rs2 = rs[pos_vel.loc[n2,'tipo']]
-                        ep2 = epsilon[pos_vel.loc[n2,'tipo']]
-                        sigma2 = sigma[pos_vel.loc[n2,'tipo']]
-                        ep = np.sqrt(ep1*ep2)
-                        s = 0.5*(sigma2 + sigma1)
-                        x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
-                        r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
-                        coss = (x1[0]-x2[0])/r 
-                        sine = (x1[1]-x2[1])/r 
-                        r = r - rs1 - rs2
-                        F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
-                        aux1 = 4*ep*((s/r)**12-(s/r)**6)
-                        e[n1] += aux1
-                        e[n2] += aux1
-                        tauxyp[i+1,j,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
-                        if r == 0:
-                            print('nn {} {}'.format(nn,nn2))
-                            print("A")
-                            time.sleep(2)
-                # na celula vizinha i+1, j+1 
-                if i+1 < region[1] and j+1 < region[3]:
-                    for nn2 in range(1,len(particle_map[i+1][j+1])):
-                        n2 = particle_map[i+1][j+1][nn2]
-                        rs2 = rs[pos_vel.loc[n2,'tipo']]
-                        ep2 = epsilon[pos_vel.loc[n2,'tipo']]
-                        sigma2 = sigma[pos_vel.loc[n2,'tipo']]
-                        ep = np.sqrt(ep1*ep2)
-                        s = 0.5*(sigma2 + sigma1)
-                        x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
-                        r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
-                        coss = (x1[0]-x2[0])/r 
-                        sine = (x1[1]-x2[1])/r 
-                        r = r - rs1 - rs2
-                        aux1 = 4*ep*((s/r)**12-(s/r)**6)
-                        e[n1] += aux1
-                        e[n2] += aux1
-                        F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
-                        tauxyp[i+1,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
-                        if r == 0:
-                            print('nn {} {}'.format(nn,nn2))
-                            print("B")
-                            time.sleep(2)
-                # na celula vizinha i, j+1 
-                if j+1 < region[3]:
-                    for nn2 in range(1,len(particle_map[i][j+1])):
-                        n2 = particle_map[i][j+1][nn2]
-                        rs2 = rs[pos_vel.loc[n2,'tipo']]
-                        ep2 = epsilon[pos_vel.loc[n2,'tipo']]
-                        sigma2 = sigma[pos_vel.loc[n2,'tipo']]
-                        ep = np.sqrt(ep1*ep2)
-                        s = 0.5*(sigma2 + sigma1)
-                        x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
-                        r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
-                        coss = (x1[0]-x2[0])/r 
-                        sine = (x1[1]-x2[1])/r 
-                        r = r - rs1 - rs2
-                        aux1 = 4*ep*((s/r)**12-(s/r)**6)
-                        e[n1] += aux1
-                        e[n2] += aux1
-                        F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
-                        tauxyp[i,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
-                        if r == 0:
-                            print('nn {} {}, x1 = {}, x2 = {}'.format(nn,nn2,x1,x2))
-                            print("C")
-                            time.sleep(2)
-                # na celula vizinha i-1, j+1 
-                if i-1 >= region[0] and j+1 < region[3]:
-                    for nn2 in range(1,len(particle_map[i-1][j+1])):
-                        n2 = particle_map[i-1][j+1][nn2]
-                        rs2 = rs[pos_vel.loc[n2,'tipo']]
-                        ep2 = epsilon[pos_vel.loc[n2,'tipo']]
-                        sigma2 = sigma[pos_vel.loc[n2,'tipo']]
-                        ep = np.sqrt(ep1*ep2)
-                        s = 0.5*(sigma2 + sigma1)
-                        x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
-                        r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
-                        coss = (x1[0]-x2[0])/r 
-                        sine = (x1[1]-x2[1])/r 
-                        r = r - rs1 - rs2
-                        aux1 = 4*ep*((s/r)**12-(s/r)**6)
-                        e[n1] += aux1
-                        e[n2] += aux1
-                        F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
-                        tauxyp[i-1,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
-                        if r == 0:
-                            print('nn {} {}'.format(nn,nn2))
-                            print("D")
-                            time.sleep(2)
-            mean_e = 0
-            for nn in range(len(particle_map[i][j])):
-                n1 = particle_map[i][j][nn]
-                mean_e += e[n1]
-            mean_e = mean_e/len(particle_map[i][j])
-            for nn in range(len(particle_map[i][j])):
-                n1 = particle_map[i][j][nn]
-                delta_e[i,j,step] += (e[n1] -  mean_e)*pos_vel.loc[n1,'x']
-            delta_e[i,j,step] = delta_e[i,j,step]/Vol
+                KE[i,j,step] += (pos_vel.loc[n1,'px']**2+pos_vel.loc[n1,'py']**2)/(2*m)
+                tauxyk[i,j,step] += pos_vel.loc[n1,'px']*pos_vel.loc[n1,'py']
+                tauxyp[i,j,step] += pos_vel.loc[n1,'RxFy']      
     if pbar:
         bar.update(step)
     step += 1
@@ -324,27 +193,166 @@ for i in range(region[0], region[1]):
         etakk[i,j,:],etakp[i,j,:],etapp[i,j,:] = greenkubo(tauxyk,tauxyp,i,j,na,dt)
 
 
-# for i in range(int(nsteps/na)):
-#     etakk[:,:,i] = etakk[:,:,i]*Vol/(2*KE2)
-#     etakp[:,:,i] = etakp[:,:,i]*Vol/(2*KE2)
-#     etapp[:,:,i] = etapp[:,:,i]*Vol/(2*KE2)
+for i in range(int(nsteps/na)):
+    etakk[:,:,i] = etakk[:,:,i]*Vol/(2*KE2)
+    etakp[:,:,i] = etakp[:,:,i]*Vol/(2*KE2)
+    etapp[:,:,i] = etapp[:,:,i]*Vol/(2*KE2)
 
+a = input('Gráfico? y/n \n')
+while a == 'y':
+    ij = input('i_ini j_ini i_fim j_fim pro grafico: ').split()
+    res_range = [int(ij[0]),int(ij[1]),int(ij[2]),int(ij[3])]
+    t = np.linspace(0,t_fim/na,int(nsteps/na))
+    plt.figure(1)
 
-# ij = input('i_ini j_ini i_fim j_fim pro grafico: ').split()
-res_range = [int(ij[0]),int(ij[1]),int(ij[2]),int(ij[3])]
-t = np.linspace(0,t_fim/na,int(nsteps/na))
-plt.figure(1)
-
-# plt.plot(t,etapp[i,j,:],label='etapp*t')
-# plt.plot(t,etakp[i,j,:],label='etakp*t')
-# plt.plot(t,etakk[i,j,:],label='etakk*t')
-# etatot = etakk[i,j,:]+etakp[i,j,:]+etapp[i,j,:]
-# plt.plot(t,etatot,'.k',label='sum')
-# m,b = np.polyfit(t[int((2/3)*len(etatot)):len(etatot)], etatot[int((2/3)*len(etatot)):len(etatot)], 1)
-# y = m*t + b 
-# plt.plot(t,y,'-k',label='Eta*t fit')
-# plt.legend()
-# plt.show()
+    plt.plot(t,etapp[i,j,:],label='etapp*t')
+    plt.plot(t,etakp[i,j,:],label='etakp*t')
+    plt.plot(t,etakk[i,j,:],label='etakk*t')
+    etatot = etakk[i,j,:]+etakp[i,j,:]+etapp[i,j,:]
+    plt.plot(t,etatot,'.k',label='sum')
+    m,b = np.polyfit(t[int((2/3)*len(etatot)):len(etatot)], etatot[int((2/3)*len(etatot)):len(etatot)], 1)
+    y = m*t + b 
+    plt.plot(t,y,'-k',label='Eta*t fit')
+    plt.legend()
+    plt.show()
+    a = input('Gráfico? y/n \n')
 
 
             
+
+    # for i in range(region[0],region[1]):
+    #     for j in range(region[2],region[3]):
+    #         for nn in range(len(particle_map[i][j])):
+    #             # print("i = {}, j = {}, nn = {}".format(i,j,nn))
+    #             n1 = particle_map[i][j][nn]
+    #             ep1 = epsilon[pos_vel.loc[n1,'tipo']]
+    #             sigma1 = sigma[pos_vel.loc[n1,'tipo']]
+    #             rs1 = rs[pos_vel.loc[n1,'tipo']]
+    #             m = mass[pos_vel.loc[n1,'tipo']]
+    #             x1 = np.array([pos_vel.loc[n1,'x'], pos_vel.loc[n1,'y']])
+    #             tauxyk[i,j,step] += -m*pos_vel.loc[n1,'v_x']*pos_vel.loc[n1,'v_y'] # falta multiplicar por 1/Volume
+    #             KE[i,j,step] += m*np.sqrt(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2)
+    #             e[n1] = m*(pos_vel.loc[n1,'v_x']**2 + pos_vel.loc[n1,'v_y']**2) 
+    #             # na própria célula 
+    #             for nn2 in range(nn+1,len(particle_map[i][j])):
+    #                 n2 = particle_map[i][j][nn2]
+    #                 rs2 = rs[pos_vel.loc[n2,'tipo']]
+    #                 ep2 = epsilon[pos_vel.loc[n2,'tipo']]
+    #                 sigma2 = sigma[pos_vel.loc[n2,'tipo']]
+    #                 ep = np.sqrt(ep1*ep2)
+    #                 s = 0.5*(sigma2 + sigma1)
+    #                 x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
+    #                 r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2)
+    #                 if r == 0:
+    #                     print('nn {} {}'.format(nn,nn2))
+    #                     print('x1 = {} {} | x2 = {} {}'.format(x1[0],x1[1],x2[0],x2[1]))
+    #                     time.sleep(2)
+    #                 coss = (x1[0]-x2[0])/r 
+    #                 sine = (x1[1]-x2[1])/r 
+    #                 r = r - rs1 - rs2
+    #                 aux1 = 4*ep*((s/r)**12-(s/r)**6)
+    #                 e[n1] += aux1
+    #                 e[n2] += aux1
+    #                 F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
+    #                 tauxyp[i,j,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
+    #             # na celula vizinha i+1, j 
+    #             if i+1 < region[1]:
+    #                 for nn2 in range(1,len(particle_map[i+1][j])):
+    #                     n2 = particle_map[i+1][j][nn2]
+    #                     rs2 = rs[pos_vel.loc[n2,'tipo']]
+    #                     ep2 = epsilon[pos_vel.loc[n2,'tipo']]
+    #                     sigma2 = sigma[pos_vel.loc[n2,'tipo']]
+    #                     ep = np.sqrt(ep1*ep2)
+    #                     s = 0.5*(sigma2 + sigma1)
+    #                     x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
+    #                     r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
+    #                     coss = (x1[0]-x2[0])/r 
+    #                     sine = (x1[1]-x2[1])/r 
+    #                     r = r - rs1 - rs2
+    #                     F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
+    #                     aux1 = 4*ep*((s/r)**12-(s/r)**6)
+    #                     e[n1] += aux1
+    #                     e[n2] += aux1
+    #                     tauxyp[i+1,j,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
+    #                     if r == 0:
+    #                         print('nn {} {}'.format(nn,nn2))
+    #                         print("A")
+    #                         time.sleep(2)
+    #             # na celula vizinha i+1, j+1 
+    #             if i+1 < region[1] and j+1 < region[3]:
+    #                 for nn2 in range(1,len(particle_map[i+1][j+1])):
+    #                     n2 = particle_map[i+1][j+1][nn2]
+    #                     rs2 = rs[pos_vel.loc[n2,'tipo']]
+    #                     ep2 = epsilon[pos_vel.loc[n2,'tipo']]
+    #                     sigma2 = sigma[pos_vel.loc[n2,'tipo']]
+    #                     ep = np.sqrt(ep1*ep2)
+    #                     s = 0.5*(sigma2 + sigma1)
+    #                     x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
+    #                     r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
+    #                     coss = (x1[0]-x2[0])/r 
+    #                     sine = (x1[1]-x2[1])/r 
+    #                     r = r - rs1 - rs2
+    #                     aux1 = 4*ep*((s/r)**12-(s/r)**6)
+    #                     e[n1] += aux1
+    #                     e[n2] += aux1
+    #                     F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
+    #                     tauxyp[i+1,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
+    #                     if r == 0:
+    #                         print('nn {} {}'.format(nn,nn2))
+    #                         print("B")
+    #                         time.sleep(2)
+    #             # na celula vizinha i, j+1 
+    #             if j+1 < region[3]:
+    #                 for nn2 in range(1,len(particle_map[i][j+1])):
+    #                     n2 = particle_map[i][j+1][nn2]
+    #                     rs2 = rs[pos_vel.loc[n2,'tipo']]
+    #                     ep2 = epsilon[pos_vel.loc[n2,'tipo']]
+    #                     sigma2 = sigma[pos_vel.loc[n2,'tipo']]
+    #                     ep = np.sqrt(ep1*ep2)
+    #                     s = 0.5*(sigma2 + sigma1)
+    #                     x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
+    #                     r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
+    #                     coss = (x1[0]-x2[0])/r 
+    #                     sine = (x1[1]-x2[1])/r 
+    #                     r = r - rs1 - rs2
+    #                     aux1 = 4*ep*((s/r)**12-(s/r)**6)
+    #                     e[n1] += aux1
+    #                     e[n2] += aux1
+    #                     F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
+    #                     tauxyp[i,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
+    #                     if r == 0:
+    #                         print('nn {} {}, x1 = {}, x2 = {}'.format(nn,nn2,x1,x2))
+    #                         print("C")
+    #                         time.sleep(2)
+    #             # na celula vizinha i-1, j+1 
+    #             if i-1 >= region[0] and j+1 < region[3]:
+    #                 for nn2 in range(1,len(particle_map[i-1][j+1])):
+    #                     n2 = particle_map[i-1][j+1][nn2]
+    #                     rs2 = rs[pos_vel.loc[n2,'tipo']]
+    #                     ep2 = epsilon[pos_vel.loc[n2,'tipo']]
+    #                     sigma2 = sigma[pos_vel.loc[n2,'tipo']]
+    #                     ep = np.sqrt(ep1*ep2)
+    #                     s = 0.5*(sigma2 + sigma1)
+    #                     x2 = np.array([pos_vel.loc[n2,'x'], pos_vel.loc[n2,'y']])
+    #                     r = np.sqrt((x1[0] - x2[0])**2 + (x1[1] - x2[1])**2) 
+    #                     coss = (x1[0]-x2[0])/r 
+    #                     sine = (x1[1]-x2[1])/r 
+    #                     r = r - rs1 - rs2
+    #                     aux1 = 4*ep*((s/r)**12-(s/r)**6)
+    #                     e[n1] += aux1
+    #                     e[n2] += aux1
+    #                     F = -(1/r**2)*(s/r)**6*(1-2*(s/r)**6)*24*ep*np.array([(x1[0]-x2[0]) - (rs1+rs2)*coss, (x1[1]-x2[1]) - (rs1+rs2)*sine])
+    #                     tauxyp[i-1,j+1,step] += -F[1]*(x1[0] - x2[0])  # Falta multiplicar por 1/Volume
+    #                     if r == 0:
+    #                         print('nn {} {}'.format(nn,nn2))
+    #                         print("D")
+    #                         time.sleep(2)
+    #         mean_e = 0
+    #         for nn in range(len(particle_map[i][j])):
+    #             n1 = particle_map[i][j][nn]
+    #             mean_e += e[n1]
+    #         mean_e = mean_e/len(particle_map[i][j])
+    #         for nn in range(len(particle_map[i][j])):
+    #             n1 = particle_map[i][j][nn]
+    #             delta_e[i,j,step] += (e[n1] -  mean_e)*pos_vel.loc[n1,'x']
+    #         delta_e[i,j,step] = delta_e[i,j,step]/Vol

@@ -35,3 +35,16 @@ se aglutinarem mais ou menos.
 
 Ek =  T'* epsilon 
 T' = Ek/epsilon (numero grande) = Ek'
+
+
+Raios atômicos:
+https://en.wikipedia.org/wiki/Atomic_radii_of_the_elements_(data_page)
+para o carbono usar uma média entre sigma e raio = 0.335, 0.170 (van der Waals)
+https://www.sciencedirect.com/topics/chemistry/rhombohedral-graphite
+
+Usar o fator de empacotamento (em geral de 0.64 a 0.74 BCC, FCC, HCF)
+
+Ideias: 
+
+Variar densidade (número)
+Variar Temperatura

@@ -24,13 +24,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randint
 
-ff = 4.0/1 # formato da região ff = x/y
-Lx = 2000
-arquivo2 = 'bin_peq2_5x1.csv'
-arquivo1 = 'bin_peq1_5x1.csv'
+ff = 1 # formato da região ff = x/y
+Lx = 400
+arquivo2 = 'poucas1.csv'
+arquivo1 = 'poucas2.csv'
 
-ratio = 0.8
-N1 = 5000
+ratio = 0
+N1 = 500
 N2 = 100
 
 L1 = Lx
@@ -104,6 +104,7 @@ Ntot = N1 + N2
 print('Ntot = {}'.format(Ntot))
 plt.scatter(p1[:,0],p1[:,1], label='pequeno2')
 
+plt.legend()
 plt.show()
 
 
