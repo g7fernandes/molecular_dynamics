@@ -664,8 +664,7 @@ module fisica
         real(dp) :: f(2)
         
         f = (fric_term/(r(1)**2 + r(2)**2))*(v(1)*r(1)+v(2)*r(2))*[r(1),r(2)]
-    end function comp_fric
-        
+    end function comp_fric     
     
     ! atualiza forças
     subroutine comp_F(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id, t)
@@ -2118,7 +2117,7 @@ module fisica
         end do
     end subroutine comp_v
     
-    subroutine walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id)
+    subroutine walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic)
         use linkedlist
         use mod1
         use data
@@ -2136,6 +2135,7 @@ module fisica
         integer, intent(in) :: mesh(:), np, subx, suby
         type(data_ptr) :: ptr,ptrn
         integer, intent(in) :: domx(2), domy(2), id
+        integer,allocatable,dimension(:,:), intent(inout) :: mic
         nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
 
         north = wall(1:1)        
@@ -2191,6 +2191,7 @@ module fisica
                             ptr = transfer(list_get(node), ptr)
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(2) = -icell(mesh(2)+1) + ptr%p%x(2) 
+                                mic(ptr%p%n,2) = mic(ptr%p%n,2) + 1
                                 call list_change(previous_node,malha(2,j)%list)
                                 node => list_next(previous_node)  
                             else 
@@ -2265,6 +2266,7 @@ module fisica
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(2) = icell(mesh(2)+1) + ptr%p%x(2) 
                                 ! print*,ptr%p%n 
+                                mic(ptr%p%n,2) = mic(ptr%p%n,2) - 1
                                 call list_change(previous_node,malha(mesh(2)+1,j)%list)
                                 node => list_next(previous_node)    
                             else 
@@ -2338,6 +2340,7 @@ module fisica
                             ! print*, "n", ptr%p%x 
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
+                                mic(ptr%p%n,1) = mic(ptr%p%n,1) - 1
                                 call list_change(previous_node,malha(i,mesh(1)+1)%list)
                                 node => list_next(previous_node)    
                             else 
@@ -2407,6 +2410,7 @@ module fisica
                             ! print*, "n", ptr%p%x 
                             if (.not. ptr%p%flag) then 
                                 ptr%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
+                                mic(ptr%p%n,1) = mic(ptr%p%n,1) + 1
                                 call list_change(previous_node,malha(i,2)%list)
                                 node => list_next(previous_node)    
                             else 
@@ -2548,7 +2552,7 @@ program main
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,vd(2)
     real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold
-    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:) !, mic(:,:), mic_rcv(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
+    integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:), mic(:,:), mic_trf(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
     type(list_t), pointer :: node
@@ -2669,11 +2673,10 @@ program main
     allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
     LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4)) 
 
-    !if (wall == 'pppp') then 
-    !    allocate(mic(N))
-    !    mic = 0
-    !    if (id == 0) allocate(mic_rcv(N))
-    !end if
+    if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then 
+        allocate(mic(N,2),mic_trf(2*N))
+        mic = 0
+    end if
 
     ! allocate(nxv(N*5),nxv_send(N*5))
 
@@ -2963,28 +2966,32 @@ program main
     end if
 
     if (print_TC == 1) then
-        allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,6))
-        call system('mkdir temp2')
+        if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
+            allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,7))
+        else 
+            allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,5))
+        end if
+        if (id == 0) call system('mkdir temp2')
     end if
 
     do while (t_fim > t)
-        ! print*, "L 1990"
+        !print*, "L 1990"
         call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força
         ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
         ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
         ! que o processo vai cuidar (subdivisões)
         ! print*, "L 1702", id
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-        ! print*, "L 1999", id
+        !print*, "L 1999", id
         !  if (id == 0) print*, "TEMPO", t, '<<<<<<<<<<', id, i
         call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
-        ! print*, "L 2002", id
+        !print*, "L 2002", id
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         
-        call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id) ! altera posição e malha
+        call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
         
-        ! print*, "L 1714", id
+        !print*, "L 1714", id
         ! if (id == 0) read(*,*)
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t) !altera força
@@ -3054,11 +3061,15 @@ program main
             deallocate(nxv,nxv_send)
 
             if (print_TC == 1) then 
+                if ((wall(1:2) == 'pp' .or. wall(3:4) == 'pp') .and. id /= 0) then
+                    mic_trf(1:N) = mic(:,1)
+                    mic_trf(N+1:2*N) = mic(:,2)
+                end if  
+
                 nRfu = 0.0_dp
 
                 call comp_pot(mesh,malha,propriedade,rcut,domx,domy, ids, id, t, nRfu) 
 
-                !! print*, "LINKED 2 VEC, id", id, "aux1", aux1
                 if (np > 1) then ! paralelo
                     aux3 = 1
                     do ii = 1,N
@@ -3080,39 +3091,73 @@ program main
                         end do
                         ! print*, "displs", displs
                     end if
-                    ! if (id == 0) then 
-                    !     print*, "L 3099"
-                    !     read(*,*)
-                    ! end if
-                    ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
 
                     ! MPI_GATHERV    (sbuf,   scount,  stype, rbuf, rcounts,  displs,   rtype,  root,  comm,  ierr)
                     call MPI_GATHERV(nRfu_send, aux1, MPI_DOUBLE_PRECISION, nRfu, rcounts, &
                      displs, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
+
                 end if 
-                ! print*, "AA"          
+
+                if ((wall(1:2) == 'pp' .or. wall(3:4) == 'pp') .and. np > 1) then
+                    ! tag = 1
+                    if (id == 1) then
+                        tag = 10
+                        call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                    end if
+                    if (id == 0) then
+                        tag = 10
+                        ! MPI_RECV(BUF, COUNT, DATATYPE, SOURCE, TAG, COMM, STATUS, IERROR)
+                        call MPI_RECV(mic_trf,2*N,MPI_integer,1,tag,MPI_COMM_WORLD,status,ierr)
+                        mic(:,1) = mic(:,1) + mic_trf(1:N) 
+                        mic(:,2) = mic(:,2) + mic_trf(N+1:2*N)
+                    end if
+                    call MPI_barrier(MPI_COMM_WORLD, ierr)
+                    if (id == 2) then
+                        tag = 20
+                        call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                    end if 
+                    if (id == 0) then
+                        tag = 20
+                        call MPI_RECV(mic_trf,2*N,MPI_integer,2,tag,MPI_COMM_WORLD,status,ierr)
+                        mic(:,1) = mic(:,1) + mic_trf(1:N) 
+                        mic(:,2) = mic(:,2) + mic_trf(N+1:2*N)
+                    end if
+                    call MPI_barrier(MPI_COMM_WORLD, ierr)
+                    if (id == 3) then
+                        tag = 30
+                        call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                    end if
+                    if (id == 0) then
+                        tag = 30
+                        call MPI_RECV(mic_trf,2*N,MPI_integer,3,tag,MPI_COMM_WORLD,status,ierr)
+                        mic(:,1) = mic(:,1) + mic_trf(1:N) 
+                        mic(:,2) = mic(:,2) + mic_trf(N+1:2*N)
+                    end if
+                    call MPI_barrier(MPI_COMM_WORLD, ierr)
+                end if 
 
                 if (id == 0) then
-                    do ii = 0, N-1
-                        ! print*, [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
-                        rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
-                    end do
-                    ! print*, "AAA"
-                    call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
-
-                    
+                    if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
+                        do ii = 0, N-1
+                            rFUp(int(nRfu(ii*6+1)),:) = &
+                                [real(mic(ii,1),kind(0.d0)),real(mic(ii,2),kind(0.d0)),nRfu(ii*6+2), & 
+                                nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                        end do
+                        call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
+                    else 
+                        do ii = 0, N-1
+                            rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
+                        end do
+                        call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
+                    end if
                 end if 
-                ! print*, "B"
-                ! read(*,*)
                 ! deallocate(nRfu,nRfu_send,rFUp)
-                ! print*, "C"
             end if 
             allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
             LT%lstrint_N(NMPT*4),LT%lstrint_S(NMPT*4),LT%lstrint_E(NMPT*4),LT%lstrint_W(NMPT*4), LT%lstrint_D(NMPT*4))
             j = j+1
         end if
         i = i+1
-        ! print*, "L 1754 >", id
         ! if (id  == 0) read(*,*)    
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         ! print*, t

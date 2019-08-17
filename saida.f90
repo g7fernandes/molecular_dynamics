@@ -14,6 +14,7 @@ module saida
         real(dp), save :: timep, etc, dtimepp
         character(LEN=*),parameter :: fmt5 = '(f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
         character(LEN=*),parameter :: fmt6 = '(f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
+        character(LEN=*),parameter :: fmt7 = '(f5.0, ", ",f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
 
         write(passo,'(i0)') step
         if (d <= 3) then
@@ -45,7 +46,12 @@ module saida
             do i = 1,n
                 write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
             end do          
+        else if (d == 7) then 
+            do i = 1,n
+                write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
+            end do          
         end if
+
         
         close(10)
 
