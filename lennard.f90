@@ -491,7 +491,7 @@ module fisica
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
                     !calcula a energia cinética atual
-                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t  .and. propriedade(ptr%p%grupo)%ismolecule) then
                         K = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + K
                         nump = nump +1
                     end if
@@ -544,7 +544,7 @@ module fisica
                 node => list_next(malha(i,j)%list)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                    if (propriedade(ptr%p%grupo)%x_lockdelay <= t  .and. propriedade(ptr%p%grupo)%ismolecule) then
                         !calcula a energia cinética atual
                         ptr%p%v = beta*ptr%p%v ! aqui o T é o beta 
                     end if
@@ -579,7 +579,7 @@ module fisica
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
                         !calcula a energia cinética atual
-                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t .and. propriedade(ptr%p%grupo)%ismolecule) then
                             K = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + K
                             nump = nump +1
                         end if
@@ -636,7 +636,7 @@ module fisica
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
-                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t  .and. propriedade(ptr%p%grupo)%ismolecule) then
                             !calcula a energia cinética atual
                             ptr%p%v = betac*ptr%p%v ! aqui o T é o beta 
                         end if
@@ -2546,7 +2546,7 @@ program main
     implicit none
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2), aux3
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, print_TC
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
@@ -2564,7 +2564,7 @@ program main
     type(string) :: part_nomes(10) ! vetor de strings
     character(1) :: optio
     type(data_ptr) :: ptr !integer,pointer :: ptr,ptrn
-    logical :: laux, termostato
+    logical :: laux, termostato, print_TC
     character(len=32) :: arg
     character :: arg1(1)
     type(lstr) :: LT
@@ -2637,7 +2637,7 @@ program main
         "Max Number of particles that will change process per iteraction")
     call CFG_add(my_cfg,"global%GField",(/0.0_dp, 0.0_dp/), &
         "Uniform Gravitational Field")
-    call CFG_add(my_cfg,"global%print_TC",1, &
+    call CFG_add(my_cfg,"global%print_TC",.false., &
         "Print transport coefficient data")
    
     call CFG_read_file(my_cfg, "settings.ini")
@@ -2711,13 +2711,14 @@ program main
         call CFG_add(my_cfg, particle//"%rs",1.1_dp, &
             "solid radius "//particle) 
         call CFG_add(my_cfg,particle//"%fric_term",1.0_dp, &
-            "Friction term")    
+            "Friction term")  
+        call CFG_add(my_cfg,particle//"%ismolecule",.true., &
+            "Is Molecule")      
     end do
     
     dx_max = 10*dimx !pra definir critério de estabilidade no uso de malha
     do i = 0,(Ntype-1)
         write(particle,'(a,i0)') 'par_',i
-    
         call CFG_get(my_cfg, particle//"%quantidade", quant)
         call CFG_get(my_cfg, particle//"%nome", nome)
         part_nomes(i+1)%str = nome
@@ -2729,7 +2730,8 @@ program main
         call CFG_get(my_cfg, particle//"%x_lockdelay", propriedade(i+1)%x_lockdelay)
         call CFG_get(my_cfg, particle//"%rs", propriedade(i+1)%rs)
         call CFG_get(my_cfg, particle//"%fric_term",propriedade(i+1)%fric_term)
-
+        call CFG_get(my_cfg, particle//"%ismolecule",propriedade(i+1)%ismolecule)
+        
         ! le o arquivo com posições
         if (dx_max < propriedade(i+1)%sigma*rcut/2) then
             dx_max = propriedade(i+1)%sigma*rcut/2
@@ -2965,7 +2967,7 @@ program main
         i = interv(j)
     end if
 
-    if (print_TC == 1) then
+    if (print_TC) then
         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
             allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,7))
         else 
@@ -3060,7 +3062,7 @@ program main
             
             deallocate(nxv,nxv_send)
 
-            if (print_TC == 1) then 
+            if (print_TC) then 
                 if ((wall(1:2) == 'pp' .or. wall(3:4) == 'pp') .and. id /= 0) then
                     mic_trf(1:N) = mic(:,1)
                     mic_trf(N+1:2*N) = mic(:,2)

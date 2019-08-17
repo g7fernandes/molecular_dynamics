@@ -57,7 +57,10 @@ print('Reading settings.ini')
 N = int(config['global']['N'].split()[0])
 nimpre =  int(config['global']['nimpre'].split()[0])
 ntype = int(config['global']['Ntype'].split()[0])
-print_TC = int(config['global']['print_TC'].split()[0])
+if config['global']['print_TC'].split()[0] == '.false.':
+    print_TC = False
+else:
+    print_TC = True
 quant = []
 rs = [] # raio sólido
 sigma = []
@@ -107,7 +110,7 @@ zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','w')
 
 print('Converting...')
 if pbar:
-    bar = progressbar.ProgressBar(max_value=nimpre-1)
+    bar = progressbar.ProgressBar(max_value=nimpre)
 for fnum in range(0,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
         csv_lector = csv.reader(file_locus,delimiter = ',')
@@ -156,7 +159,7 @@ zip_velocities.close()
 
 shutil.rmtree('temp')
 
-if print_TC == 1:
+if print_TC:
     a = os.listdir('temp2')
     zip_rFup = ZipFile(via+'/'+folder+'/rFuP.zip','w')
     for f in a:
