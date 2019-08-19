@@ -24,7 +24,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randint
 
-ff = 1 # formato da região ff = x/y
+ff = 5 # formato da região ff = x/y
 Lx = 400
 arquivo2 = 'poucas1.csv'
 arquivo1 = 'poucas2.csv'

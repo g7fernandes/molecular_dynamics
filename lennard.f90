@@ -47,9 +47,9 @@ module fisica
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut, fric_term !fric_term = força de ficção
         real(dp) :: x1(2),v1(2),x2(2),p1(2), rs1, rs2, coss, sine, u   
         real(dp), intent(inout), allocatable, dimension(:) :: nRfu
-        integer :: i,j,ct = 0, n1, n2 !,ptr, ptrn
+        integer :: i,j,ct = 0, n1, n2, dox(2), doy(2)
         integer, intent(in) :: mesh(:),domx(2),domy(2), id
-        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
@@ -356,9 +356,9 @@ module fisica
                                 if (r <= rcut) then
                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                    nRfu(n1*6-4:n1*6-2) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] &
+                                    nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
                                         + nRfu(n1*6-4:n1*6-2)
-                                    nRfu(n2*6-4:n2*6-2) = [real(ptr%p%n,kind(0.d0)), aux2(2)*r*coss, aux2(1)*r*sine, u] & 
+                                    nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
                                         + nRfu(n2*6-4:n2*6-2)
                                     if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
                                         nRfu(n2*6-5) = real(n2,kind(0.d0))
@@ -448,7 +448,7 @@ module fisica
                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
                                 nRfu(n1*6-4:n1*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] &
                                     + nRfu(n1*6-4:n1*6-2)
-                                nRfu(n2*6-4:n2*6-2) = [-aux2(2)*r*coss, -aux2(1)*r*sine, u] & 
+                                nRfu(n2*6-4:n2*6-2) = [aux2(2)*r*coss, aux2(1)*r*sine, u] & 
                                     + nRfu(n2*6-4:n2*6-2)
                                 if (i /= doy(1) .and. i /= doy(2) .and. j /= dox(1) .and. j /= dox(2)) then
                                     nRfu(n2*6-5) = real(n2,kind(0.d0))
@@ -679,9 +679,9 @@ module fisica
         real(dp), intent(in) :: GField(2), t
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
         real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2, coss, sine   
-        integer :: i,j,ct = 0 !,ptr, ptrn
+        integer :: i,j,ct = 0, dox(2), doy(2) !,ptr, ptrn
         integer, intent(in) :: mesh(:),domx(2),domy(2), id
-        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2, dox(2), doy(2)
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
@@ -1463,7 +1463,8 @@ module fisica
                         if (west == 'p' .and. cell(2) == 1) then
                             ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
                             ! print*, "domx", domx
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
+                                [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
 
                             cont_db(3) = cont_db(3) + 6
@@ -1472,7 +1473,8 @@ module fisica
                         if (north == 'p' .and. cell(1) == mesh(2)+2) then
                             ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
                             ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
+                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
                             LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
 
                             cont_db(2) = cont_db(2) + 6
@@ -1480,7 +1482,8 @@ module fisica
                         end if 
                         if (south == 'p' .and. cell(1) == 1) then
                             ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
  
                             cont_db(1) = cont_db(1) + 6
@@ -1573,7 +1576,8 @@ module fisica
 
                         elseif (north == 'p' .and. cell(1) == 2) then
                             !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = &
+                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_S(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
                         !    print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(2) = cont_db(2) + 6

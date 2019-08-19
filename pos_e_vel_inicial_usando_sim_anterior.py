@@ -46,11 +46,15 @@ for i in range(ntype):
     try:
         v_files.append(config['par_'+str(i)]['v_file'].split()[0])
         v_files[-1]  = v_files[-1][1:len(v_files[-1])-1]
+        if v_files[-1][0] == '%':
+            print("no velocity file used")
+            v_files[-1] = 'v_file_'+str(i)+'.csv'
     except:
         print("no velocity file used")
         v_files.append('v_file_'+str(i)+'.csv')
         pass 
-    
+   
+
 step = input('Extract step no. (max {}) '.format(nimpre-1))
 
 positions = []
@@ -77,8 +81,9 @@ a = 'n'
 i = 0
 for f in x_files + v_files:
     if os.path.isfile(f) and a == 'n':
-        a = input('Old positions files exist. Backup? y/n ')
-    if a != 'n' or a != 'N': 
+        a = input('Old positions/velocities files exist.\nBackup? {} y/n '.format(f))
+        print(a)
+    if a != 'n': 
         try:
             if i == 0:
                 bkp = 'bkp'

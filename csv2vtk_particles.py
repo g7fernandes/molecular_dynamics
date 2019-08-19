@@ -30,14 +30,32 @@ aux = True
 folder = 'result'
 i = 1
 
+#Ler a quantidade de arquivos de settings.
 
+config = configparser.ConfigParser()
+config.read('settings.ini')
+print('Reading settings.ini')
+N = int(config['global']['N'].split()[0])
+nimpre =  int(config['global']['nimpre'].split()[0])
+ntype = int(config['global']['Ntype'].split()[0])
+nimpre_init = int(config['global']['nimpre_init'].split()[0])
+
+if config['global']['print_TC'].split()[0] == '.false.':
+    print_TC = False
+else:
+    print_TC = True
+
+#Checar se existe arquivo
 while aux:
     try:
         os.mkdir(folder)
         aux = False
     except FileExistsError:
         print('Folder {} exists'.format(folder))
-        opt = input('Overwrite? [y/n] ')
+        if nimpre_init == 0:
+            opt = input('Overwrite? [y/n] ')
+        else:
+            opt = input('Append? (starting on {}) [y/n] '.format(nimpre_init))
         if opt == 'y' or 'opt' == 'Y':
             aux =False 
         else:
@@ -49,18 +67,7 @@ while aux:
 
 print('\nThe results will be saved at {}\n'.format(folder))
 
-#Ler a quantidade de arquivos de settings.
 
-config = configparser.ConfigParser()
-config.read('settings.ini')
-print('Reading settings.ini')
-N = int(config['global']['N'].split()[0])
-nimpre =  int(config['global']['nimpre'].split()[0])
-ntype = int(config['global']['Ntype'].split()[0])
-if config['global']['print_TC'].split()[0] == '.false.':
-    print_TC = False
-else:
-    print_TC = True
 quant = []
 rs = [] # raio sólido
 sigma = []
@@ -74,10 +81,12 @@ sigma = np.array(sigma)
 rs = rs + sigma*(2**(1/6))
 a = os.listdir('temp')
 no_out_files = nimpre
-if len(a)/2 < nimpre:
+if len(a)/2 < nimpre-nimpre_init:
     no_out_files = int(len(a)/2)
-    print("Propable incomplete execution. Processing {} files\n.".format(len(a)/2))
-    nimpre = int(len(a)/2)-1
+    print("Propable incomplete execution. Processing {} files".format(len(a)/2))
+    nimpre = int(len(a)/2)-1 + nimpre_init
+    input("nimpre = {}, nimpre_init = {}. OK?\n".format(nimpre,nimpre_init))
+if nimpre_init > 0: print("Starting on step {}".format(nimpre_init))
 
 tipo = np.zeros(N)
 rsol = np.zeros(N)
@@ -104,14 +113,21 @@ cy = np.zeros(N)
 cz = np.zeros(N)
 
 nID = np.linspace(1,N,N)
-
-zip_positions = ZipFile(via+'/'+folder+'/positions.zip','w')
-zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','w')
-
+if nimpre_init == 0:
+    zip_positions = ZipFile(via+'/'+folder+'/positions.zip','w')
+    zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','w')
+else:
+    zip_positions = ZipFile(via+'/'+folder+'/positions.zip','a')
+    zip_velocities = ZipFile(via+'/'+folder+'/velocities.zip','a')    
+    
+    
 print('Converting...')
+position_list = zip_positions.namelist()
+aux1 = 0
+flag = True
 if pbar:
-    bar = progressbar.ProgressBar(max_value=nimpre)
-for fnum in range(0,nimpre+1):
+    bar = progressbar.ProgressBar(max_value=(nimpre-nimpre_init))
+for fnum in range(nimpre_init,nimpre+1):
     with open('temp/position.csv.'+str(fnum),encoding='utf-8') as file_locus:
         csv_lector = csv.reader(file_locus,delimiter = ',')
         i = 0
@@ -119,7 +135,12 @@ for fnum in range(0,nimpre+1):
             x[i] = linea[0]
             y[i] = linea[1]
             i = i+1
-    zip_positions.write(via+'/temp/position.csv.'+str(fnum), 'position.csv.'+str(fnum))
+    while flag:
+        if any('position.csv.'+str(fnum+aux1) in s for s in position_list):
+            aux1 += 1
+        else:
+            flag = False
+    zip_positions.write(via+'/temp/position.csv.'+str(fnum), 'position.csv.'+str(fnum+aux1))
     # shutil.move(via+'/temp/position.csv.'+str(fnum),via+'/'+folder+'/position.csv.'+str(fnum)) 
     with open('temp/velocity.csv.'+str(fnum),encoding='utf-8') as file_velocitas:
         csv_lector = csv.reader(file_velocitas,delimiter = ',')
@@ -129,7 +150,7 @@ for fnum in range(0,nimpre+1):
             vy[i] = linea[1]
             
             i = i+1
-    zip_velocities.write(via+'/temp/velocity.csv.'+str(fnum),'velocity.csv.'+str(fnum))
+    zip_velocities.write(via+'/temp/velocity.csv.'+str(fnum),'velocity.csv.'+str(fnum+aux1))
     # shutil.move(via+'/temp/velocity.csv.'+str(fnum),via+'/'+folder+'/velocity.csv.'+str(fnum))
 
     fin = 0
@@ -145,19 +166,18 @@ for fnum in range(0,nimpre+1):
         tipos = tipo[ini:fin]
         rsols = rsol[ini:fin]
         nIDs = nID[ini:fin]
-        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
+        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum+aux1), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
         grupo += 1
 
     if pbar:
-        bar.update(fnum)
+        bar.update(fnum-nimpre_init)
     if fnum == nimpre+1:
         time.sleep(0.1)
 
 
 zip_positions.close()
 zip_velocities.close()
-
-shutil.rmtree('temp')
+if nimpre > nimpre_init: shutil.rmtree('temp')
 
 if print_TC:
     a = os.listdir('temp2')
