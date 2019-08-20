@@ -20,6 +20,7 @@ data[:,1] = data[:,1]*float(s[1])
 print('menores posições: [{}, {}] '.format( np.amin(data[:,0]), np.amin(data[:,1]) ))
 print('maiores posições: [{}, {}] '.format( np.amax(data[:,0]), np.amax(data[:,1]) ))
 
+np.savetxt(file_name[0:len(file_name)-4] + '_sc.csv', data, delimiter=',')
 le = len(data)
 for i in range(le-1):
     pos1 = data[i,:]
@@ -40,6 +41,5 @@ for i in range(le-1):
 print('Menores distâncias entre dois pontos.\ndx = {}, dy = {}, absoluta = {}'.format(mdx,mdy,mres))
 
     
-np.savetxt(file_name[0:len(file_name)-4] + '_sc.csv', data)
 
 
