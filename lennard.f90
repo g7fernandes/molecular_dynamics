@@ -601,7 +601,9 @@ module fisica
             end if
             call MPI_SCATTER(auxres, 2, MPI_DOUBLE_PRECISION, aux, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
         end if
+
         K = aux(1)/aux(2)
+   
    
     end function comp_K 
 
@@ -625,9 +627,7 @@ module fisica
         ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
         T_hot =  comp_K(malha,domx,domy,hot_cells,propriedade,np,id,tt)
         T_cold = comp_K(malha,domx,domy,cold_cells,propriedade,np,id,tt)
-        ! print*, "T =", T, "Td =", Td
-        ! if (id  == 0) read(*,*)    
-        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+
         betac = sqrt(Td_cold/T_cold) 
         betah = sqrt(Td_hot/T_hot)
         do i = domy(1),domy(2)
@@ -654,7 +654,8 @@ module fisica
                     end do
                 end if
             end do
-        end do        
+        end do    
+
     end subroutine corr_K
 
     !força de ficção 
@@ -1549,7 +1550,7 @@ module fisica
                         if (east == 'p' .and. cell(2) == mesh(1)+1) then
                             !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2),x(2), &
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
                             LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
@@ -1559,7 +1560,8 @@ module fisica
 
                         else if (west == 'p' .and. cell(2) == 2) then
                             !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
+                                [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(3) = cont_db(3) + 6
@@ -1568,7 +1570,8 @@ module fisica
                         
                         if (south == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = &
+                                [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
                             LT%lstrint_N(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(1) = cont_db(1) + 6
@@ -2120,6 +2123,167 @@ module fisica
             end do
         end do
     end subroutine comp_v
+
+    subroutine comp_v_corrK(malha,mesh,dt,t,propriedade,domx,domy)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer :: i,j, bsh(4)
+        integer, intent(in) :: mesh(2),domx(2),domy(2)
+        type(list_t), pointer :: node 
+        real(dp), intent(in) :: dt, t
+        type(data_ptr) :: ptr
+        real(dp):: Kcold, Khot, ksih, ksic, numpc, numh, aux(4), auxres(16) ! letra grega xi, mas pra não com x confundir será ksi. Estes são os termos de amortecimento para termostato Nosé-Hoover. numpc e nump são o número de partículas nas regiões quentes e frias
+
+        Kcold = 0
+        Khot = 0
+
+        bsh = [0,0,0,0]
+        if (domx(1) == 1) bsh(1) = 1
+        if (domx(2) == mesh(1)+2) bsh(2) = -1
+        if (domy(1) == 1) bsh(3) = 1
+        if (domy(2) == mesh(2)+2) bsh(4) = -1
+
+        do i = (domy(1)+bsh(3)), (domy(2)+bsh(4))
+            do j = (domx(1)+bsh(1)), (domx(2)+bsh(2))
+                if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                    ! Termostato afeta QUENTE
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            if (propriedade(ptr%p%grupo)%ismolecule) then
+                                ! Termostato afeta 
+                                m = propriedade(ptr%p%grupo)%m
+                                ! passo preditor
+                                ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(4*propriedade(ptr%p%grupo)%m) + dt*ksih*ptr%p%v(1)
+                                ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(4*propriedade(ptr%p%grupo)%m) + dt*ksih*ptr%p%v(2)
+                                Khot = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + Khot
+                            else
+                                m = propriedade(ptr%p%grupo)%m
+                                ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
+                                ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m) 
+                                
+                            end if
+                        end if
+                        ptr%p%F = [0,0]
+                        node => list_next(node)
+                    end do
+
+                 ! Termostato afeta FRIO
+                else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            if (propriedade(ptr%p%grupo)%ismolecule) then
+                                ! Termostato afeta 
+                                m = propriedade(ptr%p%grupo)%m
+                                ! passo preditor
+                                ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(4*propriedade(ptr%p%grupo)%m) + dt*ksic*ptr%p%v(1)/2
+                                ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(4*propriedade(ptr%p%grupo)%m) + dt*ksic*ptr%p%v(2)/2
+                                Kcold = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + Kcold    
+                            else
+                                m = propriedade(ptr%p%grupo)%m
+                                ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
+                                ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m)     
+                            end if
+                                
+                        end if
+
+                        ptr%p%F = [0,0]
+                        node => list_next(node)
+                    end do
+                    
+                ! Termostato não afeta 
+                else 
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        ! print*, "n",  ptr%p%n, "F =",ptr%p%F, "v =",ptr%p%v
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            m = propriedade(ptr%p%grupo)%m
+                            ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
+                            ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m)    
+                        end if
+                        ptr%p%F = [0,0]
+                        node => list_next(node)
+                    end do
+                end if
+            end do
+        end do
+
+
+        aux = [Khot, numph, Kcold, numpc]
+        
+        if (np > 1) then
+            call MPI_ALLGATHER(aux, 4, MPI_DOUBLE_PRECISION, auxres, 4, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, ierr)
+            ! auxres = [Khot0, numph0, Kcold0, numpc0, Khot1, numph1, Kcold1, numpc1, Khot2, numph2, Kcold2, numpc2, Khot3, numph3, Kcold3, numpc3]
+            !    K        1              3              5                7              9              11              13             15     
+            !    np              2                4             6                8             10             12              14              16
+            Khot = auxres(1)+auxres(5)+auxres(9)+auxres(13)
+            numph = auxres(2)+auxres(6)+auxres(10)+auxres(14)
+            Kcold = auxres(3)+auxres(7)+auxres(11)+auxres(15)
+            numpc = auxres(4)+auxres(8)+auxres(12)+auxres(16)
+        end if  
+
+        Khot = Khot/numph
+        Kcold = Kcold/numpc
+
+        ! Este M aqui é o grau de acoplamento
+        ! 2*N ao invés de 3*N pq estamos 2D
+        kxih  = ksih + dt*(Khot - 2*numph*Td_hot)/M
+        kxic  = ksih + dt*(Kcold - 2*numph*Td_cold)/M
+
+        do i = (domy(1)+bsh(3)), (domy(2)+bsh(4))
+            do j = (domx(1)+bsh(1)), (domx(2)+bsh(2))
+                if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                    ! Termostato afeta QUENTE
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            if (propriedade(ptr%p%grupo)%ismolecule) then
+                                ! Termostato afeta 
+                                m = propriedade(ptr%p%grupo)%m
+                                ! passo corretor
+                                ptr%p%v(1) = (1/(1+dt*ksih/2))*(ptr%p%v(1) + dt*ptr%p%F(1)/(2*propriedade(ptr%p%grupo)%m))
+                                ptr%p%v(2) = (1/(1+dt*ksih/2))*(ptr%p%v(2) + dt*ptr%p%F(2)/(2*propriedade(ptr%p%grupo)%m))
+                        
+                            end if
+                        end if
+                        ptr%p%F = [0,0]
+                        node => list_next(node)
+                    end do
+
+                 ! Termostato afeta FRIO
+                else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                    node => list_next(malha(i,j)%list)
+                    do while (associated(node))
+                        ptr = transfer(list_get(node), ptr)
+                        if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                            if (propriedade(ptr%p%grupo)%ismolecule) then
+                                ! Termostato afeta 
+                                m = propriedade(ptr%p%grupo)%m
+                                ! passo corretor
+                                ptr%p%v(1) = (1/(1+dt*ksic/2))*(ptr%p%v(1) + dt*ptr%p%F(1)/(2*propriedade(ptr%p%grupo)%m))
+                                ptr%p%v(2) = (1/(1+dt*ksic/2))*(ptr%p%v(2) + dt*ptr%p%F(2)/(2*propriedade(ptr%p%grupo)%m))   
+                            end if
+                        end if
+                        ptr%p%F = [0,0]
+                        node => list_next(node)
+                    end do
+                end if
+            end do
+        end do
+
+        ! molecular simulation pag. 52, 101 do pdf
+
+    end subroutine comp_v_corrK
     
     subroutine walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic)
         use linkedlist
@@ -2582,7 +2746,6 @@ program main
     nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
     
 
-    ! depois ver se não da pra fazer tudo serialmente
     call MPI_Init ( ierr )
     call MPI_Comm_rank ( MPI_COMM_WORLD, id, ierr )                            
     call MPI_Comm_size ( MPI_COMM_WORLD, np, ierr )
