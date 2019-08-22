@@ -28,6 +28,7 @@ program teste
         id, res(1),res(2),res(3), res(4) ,res(5) ,res(6), res(7), res(8) 
 
     
-    
+    print*, (2>1 .and. ( 1==2 .or. 3==2 ))
     call MPI_Finalize ( ierr )
+
 end program teste
