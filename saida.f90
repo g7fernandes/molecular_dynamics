@@ -7,7 +7,8 @@ module saida
         implicit none
         integer, intent(in) :: n,d
         real(dp), intent(in) :: v(n,d), t, start
-        integer :: i,step, nimpre
+        integer :: i,step, nimpre, ic1, cpu_countrate, horas, min 
+        real(dp) :: sec
         character(*) :: prop
         character(4) :: extensao = '.csv', passo
         real(dp) :: time
@@ -57,15 +58,26 @@ module saida
 
         if (prop == "position") then 
             if (step == 0) timep = 0
-            call cpu_time(time)    
+            ! call cpu_time(time)    
+                call system_clock(ic1,cpu_countrate)
+                time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
             if (step == 1) then 
-                etc = ((time - start)/step+ (time-timep))*0.5*nimpre - (time - start)
+                call system_clock(ic1,cpu_countrate)
+                time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
+                etc = ((time - start)/real(step,kind(0.d0)) + (time-timep))*0.5*real(nimpre,kind(0.d0)) - (time - start)
                 dtimepp = (time-timep)
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
             else if (step > 1) then
-                etc = ((time - start)*2/step + ((time-timep)*4 + dtimepp*4))*(nimpre-step)/10 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
-                dtimepp = (time-timep)
+                call system_clock(ic1,cpu_countrate)
+                time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
+                etc = ((time - start)*6/real(step,kind(0.d0)) + ((time-timep)*2 + dtimepp*2))* & 
+                    (real(nimpre,kind(0.d0))-real(step,kind(0.d0)))/10 
+                horas = int(etc/3600)
+                min = (int(etc) - horas*3600)/60 
+                sec = etc - real(horas*3600 + min*60,kind(0.d0))
+                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", i3,":",i2,":",f4.1 )' &
+                    ,prop//extensao//'.'//trim(passo),t,horas, min, sec                                    
+                dtimepp = (time-timep)  
             else 
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
             end if
@@ -77,7 +89,8 @@ module saida
             else 
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
             end if
-            timep = time
+           ! time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
+           ! timep = time
         end if     
         ! print*, 'Salvo arquivo ',prop//extensao//'.'//trim(passo), "t =", t, "ETC: ", etc 
         

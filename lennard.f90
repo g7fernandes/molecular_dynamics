@@ -2681,7 +2681,7 @@ module fisica
                         end if 
                     end if
                     
-
+                    
                     ptr%p%flag = .false.
                     
                     
@@ -3451,7 +3451,7 @@ module fisica
         end do
     end subroutine comp_v
 
-    subroutine comp_v_thermo_pred(malha,mesh,dt,t,propriedade,domx,domy,Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells, id)
+    subroutine comp_v_thermo_pred(malha,mesh,dt,t,propriedade,domx,domy,Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
         use linkedlist
         use mod1
         use data
@@ -3467,7 +3467,7 @@ module fisica
         type(data_ptr) :: ptr
         real(dp):: Kcold, Khot, numpc, numph, aux(4), auxres(16) ! letra grega xi, mas pra não com x confundir será ksi. Estes são os termos de amortecimento para termostato Nosé-Hoover. numpc e nump são o número de partículas nas regiões quentes e frias
         real(dp), intent(inout) :: xih, xic
-        integer ( kind = 4 ) :: np, ierr, id
+        integer ( kind = 4 ) :: ierr !, np, id
 
         numph = 0
         numpc = 0
@@ -3531,6 +3531,59 @@ module fisica
             end do
         end do
 
+        ! do i = hot_cells(3), hot_cells(4) !(domy(1)+bsh(3)), (domy(2)+bsh(4))
+        !     do j =  hot_cells(1), hot_cells(2) ! (domx(1)+bsh(1)), (domx(2)+bsh(2))
+        !         !if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+        !         ! Termostato afeta QUENTE
+        !         node => list_next(malha(i,j)%list)
+        !         do while (associated(node))
+        !             ptr = transfer(list_get(node), ptr)
+        !             if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+        !                 if (propriedade(ptr%p%grupo)%ismolecule) then
+        !                     ! Termostato afeta 
+        !                     ! passo preditor
+        !                     ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m) - dt*xih*ptr%p%v(1)
+        !                     ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m) - dt*xih*ptr%p%v(2)
+        !                     Khot = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + Khot
+        !                     numph = numph + 1
+        !                 else
+        !                     ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m) 
+        !                     ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m) 
+                            
+        !                 end if
+        !             end if
+        !             ptr%p%F = [0,0]
+        !             node => list_next(node)
+        !         end do
+        !     end do        
+        ! end do 
+        ! do i = cold_cells(3), cold_cells(4) !(domy(1)+bsh(3)), (domy(2)+bsh(4))
+        !     do j = cold_cells(1), cold_cells(2) ! (domx(1)+bsh(1)), (domx(2)+bsh(2))
+        !         ! Termostato afeta FRIO
+        !         ! else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+        !         node => list_next(malha(i,j)%list)
+        !         do while (associated(node))
+        !             ptr = transfer(list_get(node), ptr)
+        !             if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+        !                 if (propriedade(ptr%p%grupo)%ismolecule) then
+        !                     ! Termostato afeta 
+        !                     ! passo preditor
+        !                     ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m) - dt*xic*ptr%p%v(1)/2
+        !                     ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m) - dt*xic*ptr%p%v(2)/2
+        !                     Kcold = 0.5*propriedade(ptr%p%grupo)%m*(ptr%p%v(1)**2+ptr%p%v(2)**2) + Kcold    
+        !                     numpc = numpc + 1
+        !                 else
+        !                     ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m) 
+        !                     ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m) 
+        !                 end if
+        !             end if
+        !             ptr%p%F = [0,0]
+        !             node => list_next(node)
+        !         end do
+        !         !end if
+        !     end do
+        ! end do
+
         if (np > 1) then
             aux = [Khot, numph, Kcold, numpc]
             call MPI_ALLGATHER(aux, 4, MPI_DOUBLE_PRECISION, auxres, 4, MPI_DOUBLE_PRECISION, MPI_COMM_WORLD, ierr)
@@ -3562,7 +3615,7 @@ module fisica
         ! molecular simulation pag. 52, 101 do pdf
     end subroutine comp_v_thermo_pred
 
-    subroutine comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells,id)
+    subroutine comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells)
         use linkedlist
         use mod1
         use data
@@ -3571,7 +3624,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j, bsh(4)
-        integer, intent(in) :: mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4), id
+        integer, intent(in) :: mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4) !,id 
         type(list_t), pointer :: node 
         real(dp), intent(in) :: dt, t
         type(data_ptr) :: ptr
@@ -4075,12 +4128,12 @@ program main
     implicit none
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2), aux3
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, cpu_countrate,ic1, force_lingradT
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
-    real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start = 0,finish,Td,kb = 1.38064852E-23,vd(2)
-    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold, xih=0, xic=0, Mc
+    real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start,finish,Td,kb = 1.38064852E-23,vd(2)
+    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold, xih, xic, Mc
     integer,allocatable :: interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:), mic(:,:), mic_trf(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
@@ -4103,6 +4156,10 @@ program main
     integer ( kind = 4 ) tag
     integer ( kind = 4 ) id, ids(8) 
     real(real32) :: nan
+
+    start = 0
+    xih = 0
+    xic = 0
 
     nan = IEEE_VALUE(nan, IEEE_QUIET_NAN)
     
@@ -4161,6 +4218,8 @@ program main
         "Thermostat hot wall")
     call CFG_add(my_cfg,"global%Td_cold",-1.0_dp, &
         "Thermostat cold wall")
+    call CFG_add(my_cfg,"global%force_lingradT",0, &
+        "Force Temperature linear temperature gradient in the X diraction")
     call CFG_add(my_cfg,"global%cold_cells",(/0, 0, 0, 0/), &
         "Cold Cells")     
     call CFG_add(my_cfg,"global%hot_cells",(/0, 0, 0, 0/), &
@@ -4195,11 +4254,13 @@ program main
     call CFG_get(my_cfg,"global%hot_cells",hot_cells)
     call CFG_get(my_cfg,"global%Td_cold",Td_cold)
     call CFG_get(my_cfg,"global%Td_hot",Td_hot)
+    call CFG_get(my_cfg,"global%force_lingradT",force_lingradT)
     call CFG_get(my_cfg,"global%vd",vd)
     call CFG_get(my_cfg,"global%NMPT",NMPT)
     call CFG_get(my_cfg,"global%GField",GField)
     call CFG_get(my_cfg,"global%print_TC",print_TC)
     
+
 
     if (NMPT < 1) NMPT = N
     printstep = ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) 
@@ -4377,17 +4438,7 @@ program main
     
     ! imprime condições iniciais
 
-    if (id == 0) then  
-        j = 0 
-        call system('mkdir temp') !pasta temporária para armazenar os resultados
-        ! call linked2vec(malha,domx,domy,nxv,aux1)
-        call vec2csv(x,N,2,'position',j,t,nimpre,start)
-        call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
-        ! call vec2csv(celula,N,2,'cell',j)
-        j = j + 1
-
-        ! print*,'V_tot0 = ',comp_pot(mesh,malha,propriedade,rcut)
-    end if         
+  
 
     !! AQUI COMEÇA O PARALELISMO                                           
 
@@ -4473,6 +4524,30 @@ program main
     print '("id = ", I2, " ids = [", I2, " ", I2, " ", I2, " ", I2,"]")', id, ids(1), ids(2), ids(3), ids(4)
     ! libera a memória utilizada pelos processos não-raiz
     ! pois eles não vão imprimir x e v pra csv
+
+    ! id = 0 é o processo raiz 
+
+    ! if (id == 0) then
+    !     print*,'Press Return to continue'
+    !    read(*,*)
+    ! end if
+
+    if (id == 0) then 
+        call system_clock(ic1,cpu_countrate)
+        start = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
+    end if
+
+    if (id == 0) then  
+        j = 0 
+        call system('mkdir temp') !pasta temporária para armazenar os resultados
+        ! call linked2vec(malha,domx,domy,nxv,aux1)
+        call vec2csv(x,N,2,'position',j,t,nimpre,start)
+        call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
+        ! call vec2csv(celula,N,2,'cell',j)
+        j = j + 1
+        ! print*,'V_tot0 = ',comp_pot(mesh,malha,propriedade,rcut)
+    end if       
+
     if (id /= 0) then
         deallocate(v,x)
     end if
@@ -4484,14 +4559,9 @@ program main
     call clean_mesh(malha, mesh, domx, domy,id,.false.)
     ! print*, "bbb", id
   
-    ! if (id == 0) then
-    !     print*,'Press Return to continue'
-    !    read(*,*)
-    ! end if
+
     call MPI_barrier(MPI_COMM_WORLD, ierr)
     
-    ! id = 0 é o processo raiz 
-    if (id == 0)  call cpu_time(start)
 
     ! Agora dividimos para cada id uma região. 
     i = 0
@@ -4528,18 +4598,18 @@ program main
             call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,id,np,xih,xic,cold_cells,hot_cells) ! altera posição
             !print*, "L 2002", id
             ! if (id == 0) read(*,*)
-            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+            call MPI_barrier(MPI_COMM_WORLD, ierr)
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             
             ! COMP V
-            call comp_v_thermo_pred(malha,mesh,dt,t,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells,id)
+            call comp_v_thermo_pred(malha,mesh,dt,t,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
 
             ! COMP F 
             call comp_F_thermo(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t) !altera força
 
             ! COMP V
-            call comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells,id)
+            call comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells)
 
             t = t + dt
             cont2 = cont2+1
@@ -4724,14 +4794,26 @@ program main
             t = t + dt
             cont2 = cont2+1
 
-            if (i == interv_Td(j2)) then
-                if (Td > 0 .and. termostato_vel_scaling) then
+            if (termostato_vel_scaling .and. i == interv_Td(j2)) then
+                if (Td > 0) then
                     call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
                 end if
-                if (termostato_vel_scaling .and. (Td_hot > 0 .and. Td_cold > 0)) then
+                if (Td_hot > 0 .and. Td_cold > 0) then
                     call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
                 end if
                 j2 = j2 + 1
+            end if 
+
+            if (force_lingradT > 0 .and. i == interv_Td(j2)) then
+                do aux4 = 0, force_lingradT/subx
+                    
+                    domx_aux = [ (domx(2)-domx(1))/(force_lingradT/subx)
+                    
+                    call call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
+
+
+                    j2 = j2 + 1
+                end do
             end if 
             
             if (i == interv(j)) then
@@ -4894,7 +4976,8 @@ program main
     ! if (print_TC == 1) deallocate(nRfu,nRfu_send,rFUp)
     
     if (id == 0)  then
-        call cpu_time(finish)
+        call system_clock(ic1,cpu_countrate)
+        finish = real(ic1)/real(cpu_countrate,kind(0.d0))
         print '("Time = ",f10.3," seconds.")',(finish-start)
         open(unit=22,file='settings.txt',status="old", position="append", action="write")
         write(22,*) "#:Execution time = ",(finish-start)," seconds."

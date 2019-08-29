@@ -26,8 +26,8 @@ from random import randint
 
 ff = 1 # formato da região ff = x/y
 Lx = 400
-arquivo2 = 'poucas1.csv'
-arquivo1 = 'poucas2.csv'
+arquivo1 = 'poucas1.csv'
+arquivo2 = 'poucas2.csv'
 
 ratio = 0.8
 N1 = 500

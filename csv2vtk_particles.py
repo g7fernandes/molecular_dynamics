@@ -56,7 +56,7 @@ while aux:
             opt = input('Overwrite? [y/n] ')
         else:
             opt = input('Append? (starting on {}) [y/n] '.format(nimpre_init))
-        if opt == 'y' or 'opt' == 'Y':
+        if opt == 'y' or opt == 'Y':
             aux =False 
         else:
             folder = input('Enter new folder name:\n')
