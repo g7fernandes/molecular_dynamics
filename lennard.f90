@@ -466,7 +466,7 @@ module fisica
         ! print*, "FIM"
     end subroutine comp_pot    
  
-    function comp_Kglobal(malha,domx,domy,propriedade,np,id,t) result(K)
+    function comp_Kglobal(malha,domx,domy,propriedade,np,id,t,ignore_mpi) result(K)
         use linkedlist
         use mod1
         use data
@@ -480,8 +480,16 @@ module fisica
         real(dp) :: kb = 1.38064852E-23,K, auxres(8), nump, aux(2)
         type(list_t), pointer :: node
         integer ( kind = 4 ) :: np, ierr, id
+        logical, intent(in), OPTIONAL :: ignore_mpi
+        logical :: i_m
         real(dp), intent(in) :: t
         
+        if (present(ignore_mpi)) then 
+            i_m = ignore_mpi 
+        else
+            i_m = .false.
+        end if
+
         K = 0; nump = 0;
         
         do i = domy(1),domy(2)
@@ -503,7 +511,7 @@ module fisica
         ! então o processo é paralelo, vamos juntar tudo 
         aux = [K, nump]
         
-        if (np > 1) then
+        if (np > 1 .and. (.not. i_m)) then
             call MPI_GATHER(aux, 2, MPI_DOUBLE_PRECISION, auxres, 2, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
             if (id == 0) then
                 K = auxres(1)+auxres(3)+auxres(5)+auxres(7)
@@ -517,7 +525,7 @@ module fisica
     end function comp_Kglobal
         
     !Corrige energia cinética/configura temepratura global
-    subroutine corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,tt)
+    subroutine corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,tt, ignore_mpi)
         use linkedlist
         use mod1
         use data
@@ -533,9 +541,14 @@ module fisica
         type(list_t), pointer :: node
         integer ( kind = 4 ) :: np, id
         real(dp), intent(in) :: tt
+        logical, INTENT(IN), OPTIONAL :: ignore_mpi
         !calcula temperatura atual
         ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
-        T = comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
+        if (present(ignore_mpi)) then 
+            T = comp_Kglobal(malha,domx,domy,propriedade,np,id,tt,ignore_mpi)
+        else
+            T = comp_Kglobal(malha,domx,domy,propriedade,np,id,tt)
+        end if
 
         beta = sqrt(Td/T) ! aqui o T é o Beta
         do i = domy(1),domy(2)
@@ -623,6 +636,7 @@ module fisica
         type(list_t), pointer :: node
         integer ( kind = 4 ) :: np, id
         real(dp), intent(in) :: tt
+        
         !calcula temperatura atual
         ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
         T_hot =  comp_K(malha,domx,domy,hot_cells,propriedade,np,id,tt)
@@ -4128,7 +4142,7 @@ program main
     implicit none
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2), aux3
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, cpu_countrate,ic1, force_lingradT
+    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, cpu_countrate,ic1, force_lingradT, aux4, domx_aux(2)
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
     real(dp), dimension(:), allocatable :: icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
@@ -4142,6 +4156,8 @@ program main
     type(CFG_t) :: my_cfg
     character(5) :: particle
     character(4) :: wall
+    character(10) :: time 
+    character(8) :: date
     character(20) :: nome,arquivox, arquivov = '%' !nome de partícula deve ter até 20 caracteres
     type(string) :: part_nomes(10) ! vetor de strings
     character(1) :: optio
@@ -4260,6 +4276,11 @@ program main
     call CFG_get(my_cfg,"global%GField",GField)
     call CFG_get(my_cfg,"global%print_TC",print_TC)
     
+    if (termostato_vel_scaling .and. force_lingradT > 1) then
+        temp_Td(2) = t_fim
+        print*, "O termostato estará ligado ao longo de toda simulação"
+        print*, "temp_Td = ", temp_Td
+    end if
 
 
     if (NMPT < 1) NMPT = N
@@ -4527,10 +4548,14 @@ program main
 
     ! id = 0 é o processo raiz 
 
-    ! if (id == 0) then
+    if (id == 0) then
+        call date_and_time(date,time)
+        write(*,'("|| Program started at: ", a,":",a,":",a,2x, a,"/",a,"/",a, "||")') & 
+            time(1:2),time(3:4),time(5:8),date(5:6),date(7:8),date(1:4)
+
     !     print*,'Press Return to continue'
     !    read(*,*)
-    ! end if
+    end if
 
     if (id == 0) then 
         call system_clock(ic1,cpu_countrate)
@@ -4805,12 +4830,17 @@ program main
             end if 
 
             if (force_lingradT > 0 .and. i == interv_Td(j2)) then
-                do aux4 = 0, force_lingradT/subx
-                    
-                    domx_aux = [ (domx(2)-domx(1))/(force_lingradT/subx)
-                    
-                    call call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
-
+                ! ao longo da direção x, o gradiente terá [force_lingradT] passos. Teremos (domx(2)-domx(1))/(force_lingradT/subx) celulas por passo
+                do aux4 = 0, force_lingradT/subx-1
+                                      !cellx por processo  ! passos por processo 
+                    domx_aux = [1+aux4*(domx(2)-domx(1)) / (force_lingradT/subx), & 
+                                (aux4+1)*(domx(2)-domx(1)) / (force_lingradT/subx) ]  
+                    if (domx_aux(1) == 1) domx_aux(1) = 2
+                    if (domx_aux(2) == mesh(1)+2) domx_aux(2) = mesh(1) + 1 
+                    Td = sum(domx_aux)*(Td_hot-Td_cold)/(2*mesh(2))
+                    call corr_Kglobal(malha,domx_aux,domy,Td,propriedade, np,id,t,.true.)
+                    ! Este .true. indica para ignorar mpi, ou seja, pedaços de outras regiões 
+                    ! não serão levados em conta.
 
                     j2 = j2 + 1
                 end do
@@ -4980,7 +5010,9 @@ program main
         finish = real(ic1)/real(cpu_countrate,kind(0.d0))
         print '("Time = ",f10.3," seconds.")',(finish-start)
         open(unit=22,file='settings.txt',status="old", position="append", action="write")
-        write(22,*) "#:Execution time = ",(finish-start)," seconds."
+        write(22,'("#:Time to complete: ",f10.3," secounds.")') (finish-start)
+        write(22,'("#:Execution date: ",a,"/",a,"/",a,2x,a,":",a,":",a)') & 
+        date(5:6),date(7:8),date(1:4),time(1:2),time(3:4),time(5:8)
         close(22)
         call system('python csv2vtk_particles.py')
     end if

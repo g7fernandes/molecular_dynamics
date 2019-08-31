@@ -61,13 +61,13 @@ module saida
             ! call cpu_time(time)    
                 call system_clock(ic1,cpu_countrate)
                 time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
-            if (step == 1) then 
+            if (step == 2) then 
                 call system_clock(ic1,cpu_countrate)
                 time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
                 etc = ((time - start)/real(step,kind(0.d0)) + (time-timep))*0.5*real(nimpre,kind(0.d0)) - (time - start)
                 dtimepp = (time-timep)
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
-            else if (step > 1) then
+            else if (step > 2) then
                 call system_clock(ic1,cpu_countrate)
                 time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
                 etc = ((time - start)*6/real(step,kind(0.d0)) + ((time-timep)*2 + dtimepp*2))* & 

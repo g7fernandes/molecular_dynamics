@@ -48,3 +48,21 @@ Ideias:
 
 Variar densidade (número)
 Variar Temperatura
+
+In [1]: m_C = 12
+
+In [2]: m_Ar = 40
+
+In [3]: fe = (.74*(.335+.127)) # ou 0.64*
+
+In [4]: rs = 10 
+
+In [5]: rC = 0.07
+
+In [6]: sigma_Ar = 0.341
+
+In [7]: nC = (sigma_Ar*rs**2*fe/(rC**2) # numero de atomos na região
+
+In [8]: m_Cnd = nC*m_C/m_Ar # massa adimensional do carbono
+
+In [9]: print(nC)
