@@ -2,7 +2,7 @@ module fisica
     contains
     !Calcula velocidades distribuidas de acordo com MaxwellBolzmann
     ! factor = sqrt(<vd²>) = sqrt(kb*T/m) por componente
-    subroutine MaxwellBoltzmann(malha,mesh,factor)
+    subroutine MaxwellBoltzmann(malha,mesh,factor,propriedade)
         use linkedlist
         use mod1
         use randnormal
@@ -15,15 +15,22 @@ module fisica
         integer, intent(in) :: mesh(2)
         type(list_t), pointer :: node
         type(data_ptr) :: ptr
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
 
         do i = 2,mesh(2)+1
             do j = 2,mesh(1)+1
                 node => list_next(malha(i,j)%list)
                 do while (associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    ptr%p%v(1) = ptr%p%v(1) + factor(1)*GaussDeviate()
-                    ptr%p%v(2) = ptr%p%v(2) + factor(2)*GaussDeviate()
-                    ptr%p%F = [0,0]
+                    if (propriedade(ptr%p%grupo)%x_lockdelay == 0) then 
+                        ptr%p%v(1) = ptr%p%v(1) + factor(1)*GaussDeviate()
+                        ptr%p%v(2) = ptr%p%v(2) + factor(2)*GaussDeviate()
+                        ptr%p%F = [0,0]
+                    else 
+                        ptr%p%v(1) = 0
+                        ptr%p%v(2) = 0
+                        ptr%p%F = [0,0]
+                    end if
                     node => list_next(node)
                 end do
             end do
@@ -4278,8 +4285,10 @@ program main
     
     if (termostato_vel_scaling .and. force_lingradT > 1) then
         temp_Td(2) = t_fim
-        print*, "O termostato estará ligado ao longo de toda simulação"
-        print*, "temp_Td = ", temp_Td
+        if (id == 0) then
+            print*, "O termostato estará ligado ao longo de toda simulação"
+            print*, "temp_Td = ", temp_Td
+        end if
     end if
 
 
@@ -4446,10 +4455,10 @@ program main
     deallocate(grupo)
 
     ! adiciona às particulas velocidade inicial de acordo com distribuição maxwell boltzmann
-    if (vd(1) /= 0 .and. vd(2) /= 0) call MaxwellBoltzmann(malha,mesh, vd)
+    if (vd(1) /= 0 .and. vd(2) /= 0) call MaxwellBoltzmann(malha,mesh, vd,propriedade)
     if (vd(1) == 0 .and. vd(2) == 0 .and. Td > 0) then
         vd = sqrt([Td, Td])
-        call MaxwellBoltzmann(malha,mesh,vd)
+        call MaxwellBoltzmann(malha,mesh,vd,propriedade)
     end if 
     ! adicionamos uma celula para corrigir o fato de estarmos usando fantasmas
     cold_cells = cold_cells + 1
@@ -4547,7 +4556,7 @@ program main
     ! pois eles não vão imprimir x e v pra csv
 
     ! id = 0 é o processo raiz 
-
+    call MPI_barrier(MPI_COMM_WORLD, ierr)
     if (id == 0) then
         call date_and_time(date,time)
         write(*,'("|| Program started at: ", a,":",a,":",a,2x, a,"/",a,"/",a, "||")') & 
@@ -4818,33 +4827,35 @@ program main
 
             t = t + dt
             cont2 = cont2+1
+            if (i == interv_Td(j2)) then
+                if (force_lingradT > 0 .and. i == interv_Td(j2)) then
+                    ! ao longo da direção x, o gradiente terá [force_lingradT] passos. Teremos (domx(2)-domx(1))/(force_lingradT/subx) celulas por passo
+                    do aux4 = 0, force_lingradT/subx-1
+                                        !cellx por processo  ! passos por processo 
+                        domx_aux = [1+aux4*(domx(2)-domx(1)) / (force_lingradT/subx), & 
+                                    (aux4+1)*(domx(2)-domx(1)) / (force_lingradT/subx) ]  
+                        if (domx_aux(1) == 1) domx_aux(1) = 2
+                        if (domx_aux(2) == mesh(1)+2) domx_aux(2) = mesh(1) + 1 
+                        Td = Td_cold + sum(domx_aux)*(Td_hot-Td_cold)/(2*mesh(1))
+                        ! print*, Td, Td_cold, Td_hot,sum(domx_aux),2*mesh(1)
 
-            if (termostato_vel_scaling .and. i == interv_Td(j2)) then
-                if (Td > 0) then
-                    call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
-                end if
-                if (Td_hot > 0 .and. Td_cold > 0) then
-                    call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
-                end if
+                        call corr_Kglobal(malha,domx_aux,domy,Td,propriedade, np,id,t,.true.)
+                        ! Este .true. indica para ignorar mpi, ou seja, pedaços de outras regiões 
+                        ! não serão levados em conta.
+                    end do
+                end if 
+
+                if (termostato_vel_scaling .and. i == interv_Td(j2)) then
+                    if (Td > 0) then
+                        call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
+                    end if
+                    if (Td_hot > 0 .and. Td_cold > 0) then
+                        call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
+                    end if
+                    ! j2 = j2 + 1
+                end if 
                 j2 = j2 + 1
-            end if 
-
-            if (force_lingradT > 0 .and. i == interv_Td(j2)) then
-                ! ao longo da direção x, o gradiente terá [force_lingradT] passos. Teremos (domx(2)-domx(1))/(force_lingradT/subx) celulas por passo
-                do aux4 = 0, force_lingradT/subx-1
-                                      !cellx por processo  ! passos por processo 
-                    domx_aux = [1+aux4*(domx(2)-domx(1)) / (force_lingradT/subx), & 
-                                (aux4+1)*(domx(2)-domx(1)) / (force_lingradT/subx) ]  
-                    if (domx_aux(1) == 1) domx_aux(1) = 2
-                    if (domx_aux(2) == mesh(1)+2) domx_aux(2) = mesh(1) + 1 
-                    Td = sum(domx_aux)*(Td_hot-Td_cold)/(2*mesh(2))
-                    call corr_Kglobal(malha,domx_aux,domy,Td,propriedade, np,id,t,.true.)
-                    ! Este .true. indica para ignorar mpi, ou seja, pedaços de outras regiões 
-                    ! não serão levados em conta.
-
-                    j2 = j2 + 1
-                end do
-            end if 
+            end if
             
             if (i == interv(j)) then
                 deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &

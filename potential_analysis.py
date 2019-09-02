@@ -72,7 +72,7 @@ for a in range(len(dirlist)):
 a = int(input("Enter the number of the folder\n"))
 res_dir = dirlist[a]
 
-zip_rfup = ZipFile(res_dir+'/rFuP.zip','r')
+#zip_rfup = ZipFile(res_dir+'/rFuP.zip','r')
 zip_positions = ZipFile(res_dir+'/positions.zip','r')
 zip_velocities = ZipFile(res_dir+'/velocities.zip','r')
 
@@ -91,7 +91,7 @@ F = np.array([0,0])
 quant = []
 sigma = []
 epsilon = []
-rs = [] # raio sólido
+rs = [] # raio solido
 mass = []
 tipo = [0]*N
 
@@ -124,18 +124,26 @@ tipo = pd.DataFrame(tipo, columns=["tipo"]) # numero id da partícula
 hx = dimx/mesh[0]
 hy = dimy/mesh[1]
 
-nsteps = n_files # int(input('Enter the number of steps:\n'))
+print("Planned output {} files (steps).\n".format(n_files))
+nsteps = int(input('Enter the number of steps (final number):\n'))
 
-density_map = np.zeros((mesh[0],mesh[1], nsteps+1))
-Kmap = np.zeros((mesh[0],mesh[1],nsteps+1))
-Vmap = np.zeros((mesh[0],mesh[1],nsteps+1))
-step = 1
 
+print("There are {} files.".format(n_files-1))
+try:
+    step = int(input("Enter the initial step [0]: "))
+except:
+    step = 0
+    
+density_map = np.zeros((mesh[0],mesh[1], nsteps+1 - step))
+Kmap = np.zeros((mesh[0],mesh[1],nsteps+1 - step))
+Vmap = np.zeros((mesh[0],mesh[1],nsteps+1 - step))
+a = nsteps - step
+stepini = step 
 if pbar:
-    bar = progressbar.ProgressBar(max_value=nsteps)
+    bar = progressbar.ProgressBar(max_value=(a))
 while step <= nsteps: 
     particle_map = [[[] for _ in range(mesh[1])] for _ in range(mesh[0])]
-    rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["RxFy","RyFx","u","px","py"])
+#    rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["RxFy","RyFx","u","px","py"])
     pos = pd.read_csv(zip_positions.open("position.csv."+str(step)), header=None, names = ["x","y"])
     vel = pd.read_csv(zip_velocities.open("velocity.csv."+str(step)), header=None, names = ["v_x", "v_y"])
     n = [x for x in range(len(pos))]
@@ -151,24 +159,23 @@ while step <= nsteps:
         if yp == mesh[1]:
             yp = yp - 1
         particle_map[xp][yp].append( pos_vel.loc[nn,'n'] )
-        density_map[xp,yp,step] += 1
+        density_map[xp,yp,step-a] += 1
     # "print C"
     for i in range(region[0],region[1]):
         for j in range(region[2],region[3]):
             for nn in range(len(particle_map[i][j])):
                 n1 = particle_map[i][j][nn]
                 m = mass[pos_vel.loc[n1,'tipo']]
-                Kmap[i,j,step] += (pos_vel.loc[n1,'v_x']**2+pos_vel.loc[n1,'v_y']**2)*m/(2)
+                Kmap[i,j,step-a] += (pos_vel.loc[n1,'v_x']**2+pos_vel.loc[n1,'v_y']**2)*m/(2)
                 # Vmap[i,j,step] += pos_vel.loc[n1,'u']     
     if pbar:
-        bar.update(step)
+        bar.update(step-stepini)
     step += 1
 
 KE = Kmap/density_map
-a = KE.shape[2]
+
 KE = np.nan_to_num(KE)
 KE = np.sum(KE,axis=2)/a
-print("nsteps {} = a {} ?".format(nsteps,a))
 plt.figure()
 if mesh[1] == 1:
     T = KE #np.sum(KE,axis=0) # energia cinética ao longo de X
