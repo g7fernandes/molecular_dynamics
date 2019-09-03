@@ -159,14 +159,14 @@ while step <= nsteps:
         if yp == mesh[1]:
             yp = yp - 1
         particle_map[xp][yp].append( pos_vel.loc[nn,'n'] )
-        density_map[xp,yp,step-a] += 1
+        density_map[xp,yp,step-stepini] += 1
     # "print C"
     for i in range(region[0],region[1]):
         for j in range(region[2],region[3]):
             for nn in range(len(particle_map[i][j])):
                 n1 = particle_map[i][j][nn]
                 m = mass[pos_vel.loc[n1,'tipo']]
-                Kmap[i,j,step-a] += (pos_vel.loc[n1,'v_x']**2+pos_vel.loc[n1,'v_y']**2)*m/(2)
+                Kmap[i,j,step-stepini] += (pos_vel.loc[n1,'v_x']**2+pos_vel.loc[n1,'v_y']**2)*m/(2)
                 # Vmap[i,j,step] += pos_vel.loc[n1,'u']     
     if pbar:
         bar.update(step-stepini)

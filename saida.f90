@@ -84,7 +84,7 @@ module saida
 
             timep = time 
         else 
-            if (step > 0) then 
+            if (step > 2) then 
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
             else 
                 print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
