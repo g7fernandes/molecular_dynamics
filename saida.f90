@@ -49,7 +49,7 @@ module saida
             end do          
         else if (d == 7) then 
             do i = 1,n
-                write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
+                write(10,fmt7) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6),v(i,7)
             end do          
         end if
 
