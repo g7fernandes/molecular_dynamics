@@ -700,7 +700,7 @@ module fisica
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp), intent(in) :: dt, GField(2), pr(5), t ! outras propriedades da particula que gira [A, B, alpha, beta, phase]
         real(dp), intent(inout), dimension(:) :: Tor ! torque
-        real(dp), intent(inout), dimension(:) :: theta ! ângulo das partículas que giram, tangencial
+        real(dp), intent(in), dimension(:) :: theta ! ângulo das partículas que giram, tangencial
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
         real(dp) :: x1(2),v1(2),x2(2),v2(2), rs1, rs2, coss, sine, A, B, alpha,beta,ph   
         integer :: i,j, ct = 0, dox(2), doy(2) !,ptr, ptrn
@@ -712,6 +712,7 @@ module fisica
         integer, intent(out), dimension(:) :: partlst
         integer ( kind = 4 ), intent(in) :: ids(8)
 
+        partlst = 0
         A =     pr(1)
         B =     pr(2)
         alpha = pr(3)
@@ -719,7 +720,7 @@ module fisica
         ph =    pr(5)
 
         ! quanta a quantidade de partículas antes das que giram
-        print*, "t,2*dt", t, 2*dt
+        ! print*, "t,2*dt", t, 2*dt
         if (t < 2*dt) then
             rs = 0
             i = 0
@@ -730,9 +731,9 @@ module fisica
                 pa = pa + propriedade(i)%quant
             end do
             pa = pa - propriedade(i)%quant
-            print*, "pa calculado!",id,pa
+            ! print*, "pa calculado!",id,pa
         end if 
-        print*, "pa = ", pa
+        ! print*, "pa = ", pa
         
  
         !Lennard Jones
@@ -758,7 +759,6 @@ module fisica
                 !     ! print*, "L 253", ptr%p%n
                 ! end if
                 do while (associated(node))
-                    
                     ! print*, "Encontrada", ct, "celulas, id=", id
                     ptr = transfer(list_get(node), ptr) !particula selecionada
                     ! PRINT*, "L 759"
@@ -776,6 +776,7 @@ module fisica
                         ptr%p%F = ptr%p%F + GField*m1
                     end if
 
+                    if (rs1 > 0) partlst(ptr%p%n - pa) = 1
                     ! print '("x1  =", f10.6, " ", f10.6, " n ", i2, " cell ",i2," ",i2)',x1(1),x1(2), ptr%p%n,i,j
                     ! if (id == 0) read(*,*)
                     !calcular a força desta com todas as outras partículas
@@ -840,10 +841,10 @@ module fisica
                                 ! print*, "x1 =", x1
                                 ! print*, "x2 =", x2
                                 ! read(*,*)
-                                Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                 ptr%p%F = aux2 + ptr%p%F 
-                                ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                partlst(ptr%p%n - pa) = 1
+                                ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                ! partlst(ptr%p%n - pa) = 1
 
                             else if (rs2 > 0 .and. rs1 == 0) then 
                                 gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -855,14 +856,9 @@ module fisica
                                     4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                     ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
 
-                                ! print*, "r1 > 0 gamma", gamma
-                                ! print*, "aux2, aux3",aux2, aux3
-                                ! print*, "x1 =", x1
-                                ! print*, "x2 =", x2
-                                ! read(*,*)
                                 Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
                                 ptrn%p%F = aux2 + ptr%p%F 
-                                ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
+                                ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
                                 partlst(ptrn%p%n - pa) = 1
                             else
                                 ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -916,66 +912,67 @@ module fisica
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
                                 ! print*, "L 666 r", r, "id",id
-                                if (rs1 == 0 .and. rs2 == 0) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
-                               else if (rs1 > 0 .and. rs2 == 0) then
-      
-                                    gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
-                                        (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
+                                if (r <= rcut) then
+                                    if (rs1 == 0 .and. rs2 == 0) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1))*(sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
-                                        (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptr%p%n - pa) = 1
-                                else if (rs2 > 0 .and. rs1 == 0) then 
-                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
-                                     * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
-                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptrn%p%F = aux2 + ptr%p%F 
-                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptrn%p%n - pa) = 1
-                                else
-                                    ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                else if (rs1 > 0 .and. rs2 == 0) then
+        
+                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
+                                            (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1))*(sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
+                                            (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F 
+                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ! partlst(ptr%p%n - pa) = 1
+                                    else if (rs2 > 0 .and. rs1 == 0) then 
+                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
+                                        * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptrn%p%F = aux2 + ptr%p%F 
+                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        partlst(ptrn%p%n - pa) = 1
+                                    else
+                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+        
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                        
                                     end if
-    
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                    
                                 end if
-                                
                                 node => list_next(node) ! próxima partícula da célula
                             end do
                             
@@ -1009,66 +1006,68 @@ module fisica
                                     sine = (x1(2)-x2(2))/r 
                                     r = r - rs1 - rs2 !raio
                                     ! print*, "L 710 r", r, "id",id
-                                    if (rs1 == 0 .and. rs2 == 0) then
-                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        ! print*, "L 395 r", r, "id",id
-        
-                                        fric_term = (fric_term1+fric_term2)/2
-                                        if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                        end if
-                                        ptr%p%F = aux2 + ptr%p%F +fR
-                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                   else if (rs1 > 0 .and. rs2 == 0) then
-          
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 &
-                                            * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                    if (r <= rcut) then
+                                        if (rs1 == 0 .and. rs2 == 0) then
+                                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
-                                            (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
-                                            (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-        
-                                        Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                        partlst(ptr%p%n - pa) = 1
-                                    else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  & 
-                                            ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
-                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
-                                            (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 & 
-                                            - 6*beta*B*cos(beta*gamma)) + &
-                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-        
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                        partlst(ptrn%p%n - pa) = 1
-                                    else
-                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        ! print*, "L 395 r", r, "id",id
-        
-                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                        fric_term = (fric_term1+fric_term2)/2
-                                        if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            ! print*, "L 395 r", r, "id",id
+            
+                                            fric_term = (fric_term1+fric_term2)/2
+                                            if (fric_term > 0) then
+                                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            end if
+                                            ptr%p%F = aux2 + ptr%p%F +fR
+                                            ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    else if (rs1 > 0 .and. rs2 == 0) then
+            
+                                            gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                            aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 &
+                                                * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
+                                                (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                                ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
+                                                (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                                4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                                ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+            
+                                            Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                            ptr%p%F = aux2 + ptr%p%F 
+                                            ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            ! partlst(ptr%p%n - pa) = 1
+                                        else if (rs2 > 0 .and. rs1 == 0) then 
+                                            gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                            aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  & 
+                                                ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
+                                                (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                                ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 & 
+                                                - 6*beta*B*cos(beta*gamma)) + &
+                                                4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                                ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+            
+                                            Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                            ptrn%p%F = aux2 + ptr%p%F 
+                                            ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            partlst(ptrn%p%n - pa) = 1
+                                        else
+                                            ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                            aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            ! print*, "L 395 r", r, "id",id
+            
+                                            ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                            fric_term = (fric_term1+fric_term2)/2
+                                            if (fric_term > 0) then
+                                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            end if
+            
+                                            ptr%p%F = aux2 + ptr%p%F +fR
+                                            ptrn%p%F = -aux2 + ptrn%p%F - fR
                                         end if
-        
-                                        ptr%p%F = aux2 + ptr%p%F +fR
-                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     end if
                                     node => list_next(node) ! próxima partícula da célula
                                 end do                            
@@ -1106,62 +1105,64 @@ module fisica
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
                                 ! print*, "L 757 r", r, "id",id
-                                if (rs1 == 0 .and. rs2 == 0) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                if (r <= rcut) then
+                                    if (rs1 == 0 .and. rs2 == 0) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                else if (rs1 > 0 .and. rs2 == 0) then
+        
+                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
+                                            ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) &
+                                            * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F 
+                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ! partlst(ptr%p%n - pa) = 1
+                                    else if (rs2 > 0 .and. rs1 == 0) then 
+                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
+                                                (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
+                                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)*( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptrn%p%F = aux2 + ptr%p%F 
+                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        partlst(ptrn%p%n - pa) = 1
+                                    else
+                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+        
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
-                               else if (rs1 > 0 .and. rs2 == 0) then
-      
-                                    gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
-                                        ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) &
-                                        * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptr%p%n - pa) = 1
-                                else if (rs2 > 0 .and. rs1 == 0) then 
-                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
-                                            (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
-                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)*( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptrn%p%F = aux2 + ptr%p%F 
-                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptrn%p%n - pa) = 1
-                                else
-                                    ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-    
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -1194,63 +1195,65 @@ module fisica
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
                                 ! print*, "L 798 r", r, "id",id
-                                if (rs1 == 0 .and. rs2 == 0) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                    
-                               else if (rs1 > 0 .and. rs2 == 0) then
-      
-                                    gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
-                                        ((sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                if (r <= rcut) then
+                                    if (rs1 == 0 .and. rs2 == 0) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptr%p%n - pa) = 1
-                                else if (rs2 > 0 .and. rs1 == 0) then 
-                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
-                                        (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                        
+                                else if (rs1 > 0 .and. rs2 == 0) then
+        
+                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
+                                            ((sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F 
+                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ! partlst(ptr%p%n - pa) = 1
+                                    else if (rs2 > 0 .and. rs1 == 0) then 
+                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
+                                            (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptrn%p%F = aux2 + ptr%p%F 
+                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        partlst(ptrn%p%n - pa) = 1
+                                    else
+                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptrn%p%F = aux2 + ptr%p%F 
-                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptrn%p%n - pa) = 1
-                                else
-                                    ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+        
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     end if
-    
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -1284,62 +1287,64 @@ module fisica
                                 sine = (x1(2)-x2(2))/r 
                                 r = r - rs1 - rs2 !raio
                                 ! print*, "L 841 r", r, "id",id
-                                if (rs1 == 0 .and. rs2 == 0) then
-                                    aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                    end if
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
-                               else if (rs1 > 0 .and. rs2 == 0) then
-      
-                                    gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
-                                        (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                if (r <= rcut) then
+                                    if (rs1 == 0 .and. rs2 == 0) then
+                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptr%p%n - pa) = 1
-                                else if (rs2 > 0 .and. rs1 == 0) then 
-                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
-                                        ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    else if (rs1 > 0 .and. rs2 == 0) then
+        
+                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
+                                            (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F 
+                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ! partlst(ptr%p%n - pa) = 1
+                                    else if (rs2 > 0 .and. rs1 == 0) then 
+                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
+                                            ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+        
+                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptrn%p%F = aux2 + ptr%p%F 
+                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        partlst(ptrn%p%n - pa) = 1
+                                    else
+                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-    
-                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptrn%p%F = aux2 + ptr%p%F 
-                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                    partlst(ptrn%p%n - pa) = 1
-                                else
-                                    ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                    ! print*, "L 395 r", r, "id",id
-    
-                                    ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                    fric_term = (fric_term1+fric_term2)/2
-                                    if (fric_term > 0) then
-                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        ! print*, "L 395 r", r, "id",id
+        
+                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        end if
+        
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     end if
-    
-                                    ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 end if
                                 node => list_next(node) ! próxima partícula da célula                                
                             end do
@@ -1374,62 +1379,64 @@ module fisica
                                     sine = (x1(2)-x2(2))/r 
                                     r = r - rs1 - rs2 !raio
                                     ! print*, "L 885 r", r, "id",id
-                                    if (rs1 == 0 .and. rs2 == 0) then
-                                        aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        ! print*, "L 395 r", r, "id",id
-        
-                                        fric_term = (fric_term1+fric_term2)/2
-                                        if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
-                                        end if
-                                        ptr%p%F = aux2 + ptr%p%F +fR
-                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                   else if (rs1 > 0 .and. rs2 == 0) then
-          
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
-                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
-                                            * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                    if (r <= rcut) then
+                                        if (rs1 == 0 .and. rs2 == 0) then
+                                            aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-        
-                                        Tor(-pa +ptr%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                        partlst(ptr%p%n - pa) = 1
-                                    else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
-                                        aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 * &
-                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
-                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
-                                            ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
-                                            4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
-                                            ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
-        
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[-sine,-coss] 
-                                        partlst(ptrn%p%n - pa) = 1
-                                    else
-                                        ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                                        ! print*, "L 395 r", r, "id",id
-        
-                                        ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
-                                        fric_term = (fric_term1+fric_term2)/2
-                                        if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            ! print*, "L 395 r", r, "id",id
+            
+                                            fric_term = (fric_term1+fric_term2)/2
+                                            if (fric_term > 0) then
+                                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            end if
+                                            ptr%p%F = aux2 + ptr%p%F +fR
+                                            ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    else if (rs1 > 0 .and. rs2 == 0) then
+            
+                                            gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                            aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
+                                                * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                                ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                                4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                                ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+            
+                                            Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                            ptr%p%F = aux2 + ptr%p%F 
+                                            ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            ! partlst(ptr%p%n - pa) = 1
+                                        else if (rs2 > 0 .and. rs1 == 0) then 
+                                            gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                            aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 * &
+                                            (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                                ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                                4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                                ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+            
+                                            Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                            ptrn%p%F = aux2 + ptr%p%F 
+                                            ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            partlst(ptrn%p%n - pa) = 1
+                                        else
+                                            ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                            aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                            ! print*, "L 395 r", r, "id",id
+            
+                                            ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                            fric_term = (fric_term1+fric_term2)/2
+                                            if (fric_term > 0) then
+                                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            end if
+            
+                                            ptr%p%F = aux2 + ptr%p%F +fR
+                                            ptrn%p%F = -aux2 + ptrn%p%F - fR
                                         end if
-        
-                                        ptr%p%F = aux2 + ptr%p%F +fR
-                                        ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     end if
                                     node => list_next(node) ! próxima partícula da célula
                                 end do                            
@@ -1467,15 +1474,69 @@ module fisica
                             r = r - rs1 - rs2 !raio
                             ! print*, "L 931 r", r, "id",id
                             if (r <= rcut) then
-                                aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine] 
-                                fric_term = (fric_term1+fric_term2)/2
-                                if (fric_term > 0) then
-                                    fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                if (rs1 == 0 .and. rs2 == 0) then
+                                     aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
+                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                     ! print*, "L 395 r", r, "id",id
+     
+                                     fric_term = (fric_term1+fric_term2)/2
+                                     if (fric_term > 0) then
+                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                     end if
+                                     ptr%p%F = aux2 + ptr%p%F +fR
+                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                else if (rs1 > 0 .and. rs2 == 0) then
+                                     gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+     
+                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
+                                         ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+     
+                                     ! print*, "r1 > 0 gamma", gamma
+                                     ! print*, "aux2, aux3",aux2, aux3
+                                     ! print*, "x1 =", x1
+                                     ! print*, "x2 =", x2
+                                     ! read(*,*)
+                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                     ptr%p%F = aux2 + ptr%p%F 
+                                     ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                     ! partlst(ptr%p%n - pa) = 1
+     
+                                else if (rs2 > 0 .and. rs1 == 0) then 
+                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                    aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
+                                        (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+                                        ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
+                                        4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
+                                        ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
+    
+                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                    ptrn%p%F = aux2 + ptr%p%F 
+                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                    partlst(ptrn%p%n - pa) = 1
+                                else
+                                    ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
+                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    ! print*, "L 395 r", r, "id",id
+    
+                                    ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    end if
+    
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 end if
-                                ptr%p%F = aux2 + ptr%p%F +fR
-                                ptrn%p%F = -aux2 + ptrn%p%F - fR
                             end if
                             node => list_next(node) ! próxima partícula da célula                                
                         end do
@@ -3322,12 +3383,10 @@ module fisica
                 i = i+1
                 rs = propriedade(i)%rs
             end do
-            MI = 0.5*propriedade(i)%m*rs**2
-            print*, "Mi calculado!",id, mi
+            MI = 0.5*propriedade(i)%m*rs**2 ! momento de inercia de um disco
+            ! print*, "Mi calculado!",id, mi
         end if 
         
-        if (t > 2*dt .and. t < 6*dt) print*, "MI,id", mi, id
-
         !Computamos a variação de theta 
         theta = theta + dt*omega + Tor*dt**2/(2*MI)
 
@@ -6370,8 +6429,14 @@ program main
         j = 0 
         call system('mkdir temp') !pasta temporária para armazenar os resultados
         ! call linked2vec(malha,domx,domy,nxv,aux1)
-        call vec2csv(x,N,2,'position',j,t,nimpre,start)
-        call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
+
+        if (pr(1)+pr(2) == 0) then 
+            call vec2csv(x,N,2,'position',j,t,nimpre,start)
+            call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
+        else
+            call vec2csv(x,N,2,'position',j,t,nimpre,start, .true.)
+            call vec2csv(v,N,2,'velocity',j,t,nimpre,start, .true.)
+        end if
         ! call vec2csv(celula,N,2,'cell',j)
         j = j + 1
         ! print*,'V_tot0 = ',comp_pot(mesh,malha,propriedade,rcut)
@@ -6411,7 +6476,6 @@ program main
         end if
         if (id == 0) call system('mkdir temp2')
     end if
-    print*, "INICIANDO"
     !! CASE OF RUGGED LENNARD JONES THAT CAN MAKE THE PARTICLE ROTATE
     if (pr(1)+pr(2) > 0) then ! PARTICLE ROTATES
         if (id == 0) then
@@ -6432,25 +6496,36 @@ program main
         Tor = 0
         theta = 0
         partlst = 0
+        omega = 0
         ! Calcula a rotação da partícula. Velocity scaling.
         do while (t_fim > t)
             ! COMPF
-            print*, "L 6404"
             ! if (id == 0) read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             call comp_FT(GField,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera Força
+            ! print*, "L 6445"
+            ! print*, "tor", tor
+            ! print*, "omega",omega
+            ! print*, "theta",theta
+            ! read(*,*)
             ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
-            print*, "L 6408"
+            ! print*, "L 6408"
             theta = theta*partlst
             omega = omega*partlst
-
+            ! print*, "partlist",partlst
+            ! print*, "Tor",Tor
             ! COMP X
             call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
-            print*, "L 6414"
+            ! print*, "L 6460"
+            ! print*, "tor", tor
+            ! print*, "omega",omega
+            ! print*, "theta",theta
+            ! read(*,*)
+
             do ii = 1,num_rot
-                if ( partlst(ii) > -1 ) then ! particula não está no domínio
+                if ( partlst(ii) < 1) then ! particula não está no domínio
                     theta(ii) = 0
                     omega(ii) = 0
                 end if
@@ -6484,16 +6559,15 @@ program main
                     Tor = Tor + aux5(2*num_rot+1:3*num_rot)
 
                     ! omega é angulo e portanto periódico, para não estourar vamos pegar o resto da divisão por 2*pi
-                    omega = modulo(omega,2*PI)
+                    theta = modulo(theta,2*PI)
                     ! agora vamos distribuir Tor, omega e theta para todos os processos, todos terão os mesmos valores
                     aux5 = [theta,omega,Tor]
                     ! aux5(1:num_rot) = theta! vetor auxiliar pra o mpi, theta 
                     ! aux5(num_rot+1:2*num_rot) = omega ! " " ", omega
                     ! aux5(2*num_rot+1:3*num_rot) = Tor ! " " ", Tor
-
                 end if
             end if
-            print*, "L 6455", np
+            ! print*, "L 6455", np
             if (np > 1) then
                 call MPI_BCAST(aux5, 3*num_rot, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                 if (id /= 0) then 
@@ -6503,18 +6577,26 @@ program main
                 end if 
             end if 
                 
-            ! if (id == 0) read(*,*)
-            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-            print*, "L 6484"
+            ! print*, "L 6484"
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
-            print*, "L 6486"
+            ! print*, "L 6486", tor
             ! COMP F 
             call comp_FT(GField,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera força
-            print*, "L 6470"
-
+            ! print*, "L 6470",tor
+            ! print*, "L 6525"
+            ! print*, "tor", tor
+            ! print*, "omega",omega
+            ! print*, "theta",theta
+            ! read(*,*)
             ! COMP V
             call comp_vT(malha,mesh,dt,t,omega,Tor,propriedade,domx,domy,id) !altera velocidade
-            print*, "L 6474"
+            ! print*, "L 6474",tor
+
+            ! print*, "L 6534"
+            ! print*, "tor", tor
+            ! print*, "omega",omega
+            ! print*, "theta",theta
+            ! read(*,*)
 
             t = t + dt
             cont2 = cont2+1
@@ -6547,7 +6629,7 @@ program main
                 end if 
                 j2 = j2 + 1
             end if
-            print*, "L 6535 "
+
             if (i == interv(j)) then
                 deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
                 LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
@@ -6580,15 +6662,15 @@ program main
                 else 
                     nxv = nxv_send
                 end if 
-                print*, "L 6568"
+                ! print*, "L 6568"
                 if (id == 0) then
                     do ii = 0, N-1
-                        if (ii <= pa) then
+                        if (int(nxv(ii*5+1)) <= pa) then
                             x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3),0.0_dp]
                             v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5),0.0_dp]
                         else
-                            x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3),theta]
-                            v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5),omega]                            
+                            x(int(nxv(ii*5+1)),:) = [nxv(ii*5+2),nxv(ii*5+3),theta(int(nxv(ii*5+1))-pa)]
+                            v(int(nxv(ii*5+1)),:) = [nxv(ii*5+4),nxv(ii*5+5),omega(int(nxv(ii*5+1))-pa)]                            
                         end if
                     end do
                     

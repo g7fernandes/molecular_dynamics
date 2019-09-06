@@ -1,10 +1,12 @@
 module saida
     contains
-    subroutine vec2csv(v,n,d,prop,step,t,nimpre,start)
+    subroutine vec2csv(v,n,d,prop,step,t,nimpre,start,concat0)
         use mod1
         !N é o número de partículas e d é a dimensão da propriedade
         ! cada linha é uma partícula 
         implicit none
+        logical, optional :: concat0
+        logical :: laux
         integer, intent(in) :: n,d
         real(dp), intent(in) :: v(n,d), t, start
         integer :: i,step, nimpre, ic1, cpu_countrate, horas, min 
@@ -17,42 +19,72 @@ module saida
         character(LEN=*),parameter :: fmt6 = '(f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
         character(LEN=*),parameter :: fmt7 = '(f5.0, ", ",f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
 
+        laux = .false.
+        if (present(concat0)) laux = concat0
         write(passo,'(i0)') step
         if (d <= 3) then
             open(10,file='temp/'//prop//extensao//'.'//trim(passo),status="replace")
         else
             open(10,file='temp2/'//prop//extensao//'.'//trim(passo),status="replace")
         end if
-        if (d == 1) then
-            do i = 1,n
-                write(10,*) v(i,1)
-            end do
-        else if (d == 2) then
-            do i = 1,n
-                write(10,*) v(i,1),',',v(i,2)
-            end do
-        else if (d == 3) then
-            do i = 1,n
-                write(10,*) v(i,1),',',v(i,2),',',v(i,3)
-            end do
-        else if (d == 4) then
-            do i = 1,n
-                write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',v(i,4)
-            end do
-        else if (d == 5) then 
-            do i = 1,n
-                write(10,fmt5) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5)
-            end do          
-        else if (d == 6) then 
-            do i = 1,n
-                write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
-            end do          
-        else if (d == 7) then 
-            do i = 1,n
-                write(10,fmt7) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6),v(i,7)
-            end do          
-        end if
 
+        if (.not. laux) then
+            if (d == 1) then
+                do i = 1,n
+                    write(10,*) v(i,1)
+                end do
+            else if (d == 2) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',v(i,2)
+                end do
+            else if (d == 3) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',v(i,2),',',v(i,3)
+                end do
+            else if (d == 4) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',v(i,4)
+                end do
+            else if (d == 5) then 
+                do i = 1,n
+                    write(10,fmt5) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5)
+                end do          
+            else if (d == 6) then 
+                do i = 1,n
+                    write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
+                end do          
+            else if (d == 7) then 
+                do i = 1,n
+                    write(10,fmt7) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6),v(i,7)
+                end do          
+            end if
+        else 
+            if (d == 1) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',0
+                end do
+            else if (d == 2) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',v(i,2),',',0
+                end do
+            else if (d == 3) then
+                do i = 1,n
+                    write(10,*) v(i,1),',',v(i,2),',',v(i,3),',',0
+                end do
+            else if (d == 4) then 
+                do i = 1,n
+                    write(10,fmt5) v(i,1),v(i,2),v(i,3),v(i,4),0
+                end do          
+            else if (d == 5) then 
+                do i = 1,n
+                    write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),0
+                end do          
+            else if (d == 6) then 
+                do i = 1,n
+                    write(10,fmt7) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6),0
+                end do          
+            end if
+        end if 
         
         close(10)
 

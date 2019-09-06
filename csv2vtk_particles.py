@@ -71,10 +71,19 @@ print('\nThe results will be saved at {}\n'.format(folder))
 quant = []
 rs = [] # raio sólido
 sigma = []
+grupoquegira = -1
 for i in range(ntype):
     quant.append(int(config['par_'+str(i)]['quantidade'].split()[0]))
     rs.append(float(config['par_'+str(i)]['rs'].split()[0]))
     sigma.append(float(config['par_'+str(i)]['sigma'].split()[0]))
+    if config['par_'+str(i)]['ismolecule'].split()[0] == ".false.":
+        grupoquegira = i
+    #     try:
+    #         pr = config['par_'+str(i)]['rs'].split()[0]
+    #         pr = sum([float(i) for i in pr][0:2]) # se for igual a zero, a partícula não gira pois é lisa
+
+            
+
 
 rs = np.array(rs)
 sigma = np.array(sigma)
@@ -103,14 +112,16 @@ for i in range(len(quant)):
 x = np.zeros(N)
 y = np.zeros(N)
 z = np.zeros(N)
+theta = np.full(N,np.nan)
 
 vx = np.zeros(N)
 vy = np.zeros(N)
-vz = np.zeros(N)
+# vz = np.zeros(N)
+omega = np.full(N,np.nan)
 
-cx = np.zeros(N)
-cy = np.zeros(N)
-cz = np.zeros(N)
+# cx = np.zeros(N)
+# cy = np.zeros(N)
+# cz = np.zeros(N)
 
 nID = np.linspace(1,N,N)
 if nimpre_init == 0:
@@ -134,6 +145,8 @@ for fnum in range(nimpre_init,nimpre+1):
         for linea in csv_lector:
             x[i] = linea[0]
             y[i] = linea[1]
+            if len(linea) == 3:
+                theta[i] = linea[2]
             i = i+1
     while flag:
         if any('position.csv.'+str(fnum+aux1) in s for s in position_list):
@@ -148,6 +161,8 @@ for fnum in range(nimpre_init,nimpre+1):
         for linea in csv_lector:
             vx[i] = linea[0]
             vy[i] = linea[1]
+            if len(linea) == 3:
+                omega[i] = linea[2]
             
             i = i+1
     zip_velocities.write(via+'/temp/velocity.csv.'+str(fnum),'velocity.csv.'+str(fnum+aux1))
@@ -161,12 +176,20 @@ for fnum in range(nimpre_init,nimpre+1):
         xs = x[ini:fin]
         ys = y[ini:fin]
         zs = z[ini:fin]
-        vxs = vx[ini:fin]
-        vys = vy[ini:fin]
+        # vxs = vx[ini:fin]
+        # vys = vy[ini:fin]
+        # "Vx" : vxs, "Vy" : vys
+        vel = (vx[ini:fin],vy[ini:fin],np.zeros(fin-ini))
         tipos = tipo[ini:fin]
         rsols = rsol[ini:fin]
         nIDs = nID[ini:fin]
-        pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum+aux1), xs, ys, zs, data = {"Vx" : vxs, "Vy" : vys, "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
+        thetas = theta[ini:fin] 
+        omegas = omega[ini:fin]
+        if np.isnan([theta[ini]]) or grupoquegira != grupo:
+            pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum+aux1), xs, ys, zs, data = {"Vel" : vel , "Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })               
+        else:
+            pointsToVTK(via+'/'+folder +'/grupo'+ str(grupo) + '_' +str(fnum+aux1), xs, ys, zs, data = {"Vel" : vel , "Theta" : thetas, "Omega" : omegas ,"Tipo" : tipos, "raio_solido" : rsols, "nID" : nIDs })       
+        
         grupo += 1
 
     if pbar:
