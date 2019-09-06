@@ -1,5 +1,21 @@
 module fisica
     contains
+
+    function magtorque(angle, hfield, t) result(Tor)
+        use mod0
+
+        real(dp) :: angle
+        real(dp), dimension(5) :: hfield
+        real(dp) :: t, Tor
+
+        if (time > hfield(5)) then
+            Tor = hfield(1)*(cos(angle)*hfield(3) - sin(angle)*hfield(2))*sin(t*hfield(4))
+        else 
+            Tor = 0
+        end if
+
+    end function magtorque
+
     !Calcula velocidades distribuidas de acordo com MaxwellBolzmann
     ! factor = sqrt(<vd²>) = sqrt(kb*T/m) por componente
     subroutine MaxwellBoltzmann(malha,mesh,factor,propriedade)
@@ -689,7 +705,7 @@ module fisica
     end function comp_fric     
 
     ! atualiza forças
-    subroutine comp_FT(GField,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,domy, ids, id, t,dt,partlst)
+    subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,domy, ids, id, t,dt,partlst)
         use linkedlist
         use mod1
         use data
@@ -698,7 +714,7 @@ module fisica
         
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
-        real(dp), intent(in) :: dt, GField(2), pr(5), t ! outras propriedades da particula que gira [A, B, alpha, beta, phase]
+        real(dp), intent(in) :: dt, GField(2),hfield(5), pr(5), t ! outras propriedades da particula que gira [A, B, alpha, beta, phase]
         real(dp), intent(inout), dimension(:) :: Tor ! torque
         real(dp), intent(in), dimension(:) :: theta ! ângulo das partículas que giram, tangencial
         real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut,r_cut, fric_term !fric_term = força de ficção
@@ -776,7 +792,10 @@ module fisica
                         ptr%p%F = ptr%p%F + GField*m1
                     end if
 
-                    if (rs1 > 0) partlst(ptr%p%n - pa) = 1
+                    if (rs1 > 0) then
+                        partlst(ptr%p%n - pa) = 1
+                        Tor(-pa +ptr%p%n) = Tor(-pa +ptr%p%n) + magtorque(theta(-pa+ptr%p%n),hfield,t)
+                    end if
                     ! print '("x1  =", f10.6, " ", f10.6, " n ", i2, " cell ",i2," ",i2)',x1(1),x1(2), ptr%p%n,i,j
                     ! if (id == 0) read(*,*)
                     !calcular a força desta com todas as outras partículas
@@ -6002,7 +6021,7 @@ program main
     real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
     real(dp), dimension(:), allocatable :: aux5,omega,theta,Tor,icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
     real(dp) :: t=0,t_fim,dt,printstep, sigma, epsil, rcut,aux2,start,finish,Td,vd(2)
-    real(dp) :: GField(2), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold, xih, xic, Mc, rs, pr(5)
+    real(dp) :: GField(2), HField(5), temp_Td(3), dimX, dimY, dx_max, Td_hot, Td_cold, xih, xic, Mc, rs, pr(5)
     integer,allocatable :: partlst(:),interv(:), interv_Td(:), grupo(:), rcounts(:), displs(:), mic(:,:), mic_trf(:) ! mic são vetores para contar quantas vezes atravessou a borda periodica
     type(container), allocatable,dimension(:,:) :: malha
     type(prop_grupo),allocatable,dimension(:) :: propriedade
@@ -6022,7 +6041,7 @@ program main
     character :: arg1(1)
     type(lstr) :: LT
     integer ( kind = 4 ) status(MPI_STATUS_SIZE)
-    integer ( kind = 4 ) ierr
+    integer ( kind = 4 ) ierr, gruporot
     integer ( kind = 4 ) np
     integer ( kind = 4 ) tag
     integer ( kind = 4 ) id, ids(8) 
@@ -6102,6 +6121,8 @@ program main
         "Max Number of particles that will change process per iteraction")
     call CFG_add(my_cfg,"global%GField",(/0.0_dp, 0.0_dp/), &
         "Uniform Gravitational Field")
+    call CFG_add(my_cfg,"global%MField",(/0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp/), &
+        "Uniform Magnetic Field")
     call CFG_add(my_cfg,"global%print_TC",.false., &
         "Print transport coefficient data")
    
@@ -6130,6 +6151,7 @@ program main
     call CFG_get(my_cfg,"global%vd",vd)
     call CFG_get(my_cfg,"global%NMPT",NMPT)
     call CFG_get(my_cfg,"global%GField",GField)
+    call CFG_get(my_cfg,"global%MField",HField)
     call CFG_get(my_cfg,"global%print_TC",print_TC)
     
     if (termostato_vel_scaling .and. force_lingradT > 1) then
@@ -6212,7 +6234,10 @@ program main
         call CFG_get(my_cfg, particle//"%rs", propriedade(i+1)%rs)
         call CFG_get(my_cfg, particle//"%fric_term",propriedade(i+1)%fric_term)
         call CFG_get(my_cfg, particle//"%ismolecule",propriedade(i+1)%ismolecule)
-        if (.not. propriedade(i+1)%ismolecule) call CFG_get(my_cfg, particle//"%pr",pr)
+        if (.not. propriedade(i+1)%ismolecule) then 
+            call CFG_get(my_cfg, particle//"%pr",pr)
+            if(sum(pr) > 0) gruporot = i+1
+        end if
         
 
         ! le o arquivo com posições
@@ -6498,7 +6523,8 @@ program main
         num_rot = propriedade(ii)%quant
         allocate(omega(num_rot), Tor(num_rot), theta(num_rot),partlst(num_rot), aux5(num_rot*3))
         Tor = 0
-        theta = 0
+        call random_number(theta)
+        theta = PI*theta
         partlst = 0
         omega = 0
         ! Calcula a rotação da partícula. Velocity scaling.
@@ -6506,7 +6532,7 @@ program main
             ! COMPF
             ! if (id == 0) read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-            call comp_FT(GField,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera Força
+            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera Força
             ! print*, "L 6445"
             ! print*, "tor", tor
             ! print*, "omega",omega
@@ -6516,6 +6542,7 @@ program main
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
             ! print*, "L 6408"
+            if (propriedade(gruporot)%x_lockdelay > t) omega = 0
             theta = theta*partlst
             omega = omega*partlst
             ! print*, "partlist",partlst
@@ -6585,7 +6612,7 @@ program main
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             ! print*, "L 6486", tor
             ! COMP F 
-            call comp_FT(GField,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera força
+            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera força
             ! print*, "L 6470",tor
             ! print*, "L 6525"
             ! print*, "tor", tor
