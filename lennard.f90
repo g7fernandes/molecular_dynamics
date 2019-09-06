@@ -840,7 +840,8 @@ module fisica
                                 ! print*, "aux2, aux3",aux2, aux3
                                 ! print*, "x1 =", x1
                                 ! print*, "x2 =", x2
-                                ! read(*,*)
+                                ! if (aux3 > 20) read(*,*)
+                    
                                 Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                 ptr%p%F = aux2 + ptr%p%F 
                                 ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
@@ -5358,6 +5359,7 @@ module fisica
                     ptr = transfer(list_get(node), ptr)
                     ! print*, "n",  ptr%p%n, "F =",ptr%p%F, "v =",ptr%p%v
                     if (propriedade(ptr%p%grupo)%x_lockdelay <= t) then
+                        ! read(*,*)
                         ptr%p%v(1) = ptr%p%v(1) + ptr%p%F(1)*dt/(2*propriedade(ptr%p%grupo)%m)
                         ptr%p%v(2) = ptr%p%v(2) + ptr%p%F(2)*dt/(2*propriedade(ptr%p%grupo)%m)    
                     end if
@@ -6265,9 +6267,11 @@ program main
     printstep = nint(t_fim/dt)/nimpre
     interv = (/(printstep*i,i=0,nimpre) /)
     ! Vetor que indica quando fazer velocity scaling
-    printstep = nint(temp_Td(3))
-    interv_Td = (/(printstep*i,i=0,nint( ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) )) /)
-    interv_Td = interv_Td + nint(temp_Td(1)/dt)
+    if (termostato_vel_scaling) then
+        printstep = nint(temp_Td(3))
+        interv_Td = (/(printstep*i,i=0,nint( ((temp_Td(2)-temp_Td(1))/dt)/temp_Td(3) )) /)
+        interv_Td = interv_Td + nint(temp_Td(1)/dt)
+    end if
     i = 0
     
     if (Td == 0) then
@@ -6430,7 +6434,7 @@ program main
         call system('mkdir temp') !pasta temporária para armazenar os resultados
         ! call linked2vec(malha,domx,domy,nxv,aux1)
 
-        if (pr(1)+pr(2) == 0) then 
+        if (abs(pr(3)+pr(4)) == 0) then 
             call vec2csv(x,N,2,'position',j,t,nimpre,start)
             call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
         else
@@ -6477,7 +6481,7 @@ program main
         if (id == 0) call system('mkdir temp2')
     end if
     !! CASE OF RUGGED LENNARD JONES THAT CAN MAKE THE PARTICLE ROTATE
-    if (pr(1)+pr(2) > 0) then ! PARTICLE ROTATES
+    if (abs(pr(4)+pr(3)) > 0) then ! PARTICLE ROTATES
         if (id == 0) then
             deallocate(x,v)
             allocate(x(N,3),v(N,3))
