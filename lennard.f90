@@ -8,7 +8,7 @@ module fisica
         real(dp), dimension(5) :: hfield
         real(dp) :: t, Tor
 
-        if (time > hfield(5)) then
+        if (t > hfield(5)) then
             Tor = hfield(1)*(cos(angle)*hfield(3) - sin(angle)*hfield(2))*sin(t*hfield(4))
         else 
             Tor = 0
@@ -855,17 +855,19 @@ module fisica
                                     4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                     ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
 
-                                ! print*, "r1 > 0 gamma", gamma
-                                ! print*, "aux2, aux3",aux2, aux3
-                                ! print*, "x1 =", x1
-                                ! print*, "x2 =", x2
-                                ! if (aux3 > 20) read(*,*)
-                    
+
                                 Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                 ptr%p%F = aux2 + ptr%p%F 
-                                ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
-                                ! partlst(ptr%p%n - pa) = 1
+                                ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                ! print*, "r1 >0"
+                                ! print*, "ptr%p%F" , ptr%p%F, "particula"
+                                ! print*, "ptrn%p%F" , ptrn%p%F
+                                ! print*, "aux2", aux2, "aux3", aux3
+                                ! print*, "-aux3*[sine,-cos]", -aux3*[sine,-coss] 
 
+                                ! read(*,*)
+                                ! partlst(ptr%p%n - pa) = 1
+                                    
                             else if (rs2 > 0 .and. rs1 == 0) then 
                                 gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
                                 aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
@@ -876,9 +878,16 @@ module fisica
                                     4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                     ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
 
-                                Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                ptrn%p%F = aux2 + ptr%p%F 
-                                ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                
+                                Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                ptrn%p%F = -aux2 + ptrn%p%F 
+                                ! print*, "r2 > 0"
+                                ! print*, "ptr%p%F" , ptr%p%F
+                                ! print*, "ptrn%p%F" , ptrn%p%F, "particula"
+                                ! print*, "aux2", aux2, "aux3", aux3
+                                ! print*, "aux3*[sine,-cos]", aux3*[sine,-coss] 
+                                ! read(*,*)
                                 partlst(ptrn%p%n - pa) = 1
                             else
                                 ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -945,7 +954,7 @@ module fisica
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                else if (rs1 > 0 .and. rs2 == 0) then
+                                    else if (rs1 > 0 .and. rs2 == 0) then
         
                                         gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
@@ -957,9 +966,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                         ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -971,9 +980,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F 
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1052,9 +1061,9 @@ module fisica
                                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
             
-                                            Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                            Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                             ptr%p%F = aux2 + ptr%p%F 
-                                            ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                             ! partlst(ptr%p%n - pa) = 1
                                         else if (rs2 > 0 .and. rs1 == 0) then 
                                             gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -1068,9 +1077,9 @@ module fisica
                                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
             
-                                            Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                            ptrn%p%F = aux2 + ptr%p%F 
-                                            ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                            ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                            ptrn%p%F = -aux2 + ptrn%p%F 
                                             partlst(ptrn%p%n - pa) = 1
                                         else
                                             ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1149,9 +1158,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                         ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -1163,9 +1172,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F 
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1240,9 +1249,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                         ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -1254,9 +1263,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F 
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1331,9 +1340,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                        Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                         ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -1345,9 +1354,9 @@ module fisica
                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
         
-                                        Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptrn%p%F = aux2 + ptr%p%F 
-                                        ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                        Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                        ptrn%p%F = -aux2 + ptrn%p%F 
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1423,9 +1432,9 @@ module fisica
                                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
             
-                                            Tor(-pa +ptr%p%n) = -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                            Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
                                             ptr%p%F = aux2 + ptr%p%F 
-                                            ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                             ! partlst(ptr%p%n - pa) = 1
                                         else if (rs2 > 0 .and. rs1 == 0) then 
                                             gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
@@ -1437,9 +1446,9 @@ module fisica
                                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
             
-                                            Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                            ptrn%p%F = aux2 + ptr%p%F 
-                                            ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                            Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                            ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                            ptrn%p%F = -aux2 + ptrn%p%F 
                                             partlst(ptrn%p%n - pa) = 1
                                         else
                                             ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -1522,9 +1531,9 @@ module fisica
                                      ! print*, "x1 =", x1
                                      ! print*, "x2 =", x2
                                      ! read(*,*)
-                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                     ptr%p%F = aux2 + ptr%p%F 
-                                     ptrn%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                    Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
+                                    ptr%p%F = aux2 + ptr%p%F 
+                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                      ! partlst(ptr%p%n - pa) = 1
      
                                 else if (rs2 > 0 .and. rs1 == 0) then 
@@ -1537,9 +1546,9 @@ module fisica
                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
     
-                                    Tor(-pa +ptrn%p%n) = aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptrn%p%F = aux2 + ptr%p%F 
-                                    ptr%p%F = -aux2 + ptrn%p%F + aux3*[sine,-coss] 
+                                    Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
+                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
+                                    ptrn%p%F = -aux2 + ptrn%p%F 
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -5357,10 +5366,10 @@ module fisica
                 rs = propriedade(i)%rs
             end do
             MI = 0.5*propriedade(i)%m*rs**2
-            print*, "Mi calculado compV!",id, mi
+            ! print*, "Mi calculado compV!",id, mi
         end if 
         
-        if (t > 2*dt .and. t < 4*dt) print*, "MI,id compV", mi, id
+        ! if (t > 2*dt .and. t < 4*dt) print*, "MI,id compV", mi, id
 
         omega = omega + Tor*dt/(2*MI)
         Tor = 0 ! reinicia os torques para a próxima iteração 
@@ -6532,8 +6541,8 @@ program main
             ! COMPF
             ! if (id == 0) read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! print*, "L 6544"
             call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera Força
-            ! print*, "L 6445"
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
@@ -6545,8 +6554,7 @@ program main
             if (propriedade(gruporot)%x_lockdelay > t) omega = 0
             theta = theta*partlst
             omega = omega*partlst
-            ! print*, "partlist",partlst
-            ! print*, "Tor",Tor
+
             ! COMP X
             call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
             ! print*, "L 6460"
@@ -6563,7 +6571,7 @@ program main
             end do
             ! compartilha valores de theta, torque e omega (pos, torque, vel angular)
             ! num_rot, numero de partícuals que giram
-          ! print*, "L 6426"
+            ! print*, "L 6574"
             
             if (np > 1) then
                 if (id /= 0) then 
@@ -6598,7 +6606,7 @@ program main
                     ! aux5(2*num_rot+1:3*num_rot) = Tor ! " " ", Tor
                 end if
             end if
-            ! print*, "L 6455", np
+            ! print*, "L 6609", np
             if (np > 1) then
                 call MPI_BCAST(aux5, 3*num_rot, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                 if (id /= 0) then 
@@ -6608,13 +6616,13 @@ program main
                 end if 
             end if 
                 
-            ! print*, "L 6484"
+            ! print*, "L 6619"
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
-            ! print*, "L 6486", tor
+            ! print*, "L 6621"
             ! COMP F 
             call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera força
             ! print*, "L 6470",tor
-            ! print*, "L 6525"
+            ! print*, "L 6625"
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
@@ -6623,7 +6631,7 @@ program main
             call comp_vT(malha,mesh,dt,t,omega,Tor,propriedade,domx,domy,id) !altera velocidade
             ! print*, "L 6474",tor
 
-            ! print*, "L 6534"
+            ! print*, "L 6634"
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
