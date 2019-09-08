@@ -1,5 +1,5 @@
 import numpy as np
-from numpy import sin, cos
+from numpy import sin, cos, heaviside
 import matplotlib.pyplot as plt
  
 
@@ -9,14 +9,19 @@ def abssin(x):
 maxF = 40
 sigma_ref = 0.341
 
-delta = 0.005
+
+delta = 0.01
 sig0 = 1
-ep0 = 4
+ep0 = 1
 rs = 5 # raio solido
 rm = .245 / sigma_ref #raio do atomo
 # .245 é a distância entra atomos em estrutura hexagonal rombica
 
-x = y = np.arange(0, 3*sig0+rs, delta)
+# caso com polimero
+Np = 6
+deltad = 2
+
+x = y = np.arange(-(3*sig0+rs), 3*sig0+rs, delta)
 X, Y = np.meshgrid(x, y)
 
 r = np.sqrt(X**2 + Y**2)
@@ -24,9 +29,9 @@ np.place(r, r < rs, np.nan)
 gamma = np.arctan2(Y,X)
 
 
-A = 0.0001 #ep0/2 #(0.071/sigma_ref)/4  # no epsilon
-B = 0.0001 #(0.071/sigma_ref)/8 # no sigma
-alpha = beta = (2*np.pi*rs/rm)
+A = 0 #ep0/8 #(0.071/sigma_ref)/4  # no epsilon
+B = 0 #(0.071/sigma_ref)/8 # no sigma
+alpha = beta = 6 # (2*np.pi*rs/rm)/2
 ph = (2*np.pi/alpha)
 print("A {}, B {}, alpha {}, fase {}, periodo {}\n".format(A, B, alpha ,ph,2*np.pi/alpha))
 
@@ -35,17 +40,20 @@ rmolec = rs
 gmolec = np.linspace(0,2*np.pi/4,round((2*np.pi*rs/rm)/4))
 #beta = 6
 
-V = 4*ep0*(1+A*np.sin(alpha*gamma+ph))* ( (sig0*(1+B*np.sin(beta*gamma))/(r-rs) )**12 - (sig0*(1+B*np.sin(beta*gamma))/(r-rs))**6  )
+# LJ rugoso
+#V = 4*ep0*(1+A*np.sin(alpha*gamma+ph))* ( (sig0*(1+B*np.sin(beta*gamma))/(r-rs) )**12 - (sig0*(1+B*np.sin(beta*gamma))/(r-rs))**6  ) 
+# com polimero
+V = 4*ep0*(1+A*np.sin(alpha*gamma+ph))* ( (sig0*(1+B*np.sin(beta*gamma))/(r-rs) )**12 - (sig0*(1+B*np.sin(beta*gamma))/(r-rs))**6  ) + (Np/(2*deltad))*((deltad*2 + sig0) + (r-rs) *(np.log((deltad*2 + sig0)/(r-rs) ) -1))*np.sin(beta*gamma)**2*heaviside(r-(rs+sig0) , 1)*(1-heaviside(r-(deltad*2+rs+sig0) , 1))
+
 #V = 4*ep0*(1+A*np.sin(alpha*gamma+ph))* ( (sig0*(1+B*abs(np.sin(beta*gamma)))/(r-rs) )**12 - (sig0*(1+B*abs(np.sin(beta*gamma)))/(r-rs))**6  )
-
 #V = 4*ep0*(1+A*np.sin(alpha*gamma+ph))* ( (sig0/(r-rs*(1+B*np.sin(beta*gamma))) )**12 - (sig0/(r-rs*(1+B*np.sin(beta*gamma))))**6  )
-
 #Fr = 24*ep0*(1+A*np.sin(alpha*gamma+ph))*(1/(r-rs)**2) *  ( (sig0*(1+B*np.sin(beta*gamma))/(r-rs))**6 * (1-2* (sig0*(1+B*np.sin(beta*gamma))/(r-rs))**6 )) *  (r-rs)
 # Fg = (1/(r-rs))* ( (4*ep0*(A*np.sin(alpha*gamma+ph) + 1 ))* (sig0/(r-rs))**6*(B*(np.sin(beta*gamma))+1)**5 * \
 #      ( (sig0/(r-rs))**6 * 12*beta*B*np.cos(beta*gamma)*(B*(np.sin(beta*gamma))+1)**6 - 6*beta*B*np.cos(beta*gamma)) + \
 #     4*alpha*A*ep0*np.cos(alpha*gamma+ph)*(sig0/(r-rs))**6*(B*(np.sin(beta*gamma))+1)**6 * \
 #     ((sig0/(r-rs))**6 * (B*(np.sin(beta*gamma))+1)**6 - 1) ) 
 
+#rugoso
 Fr = 24*ep0*(1+A*sin(alpha*gamma+ph))*(1/(r-rs)**2) * ((sig0*(1+B*sin(beta*gamma))/(r-rs))**6 *  \
                                     (1-2* (sig0*(1+B*sin(beta*gamma))/(r-rs))**6 )) * (r-rs)
 
@@ -54,6 +62,10 @@ Fg = (1/(r-rs))* ( (4*ep0*(A*np.sin(alpha*gamma+ph) + 1 ))* (sig0/(r-rs))**6*(B*
     4*alpha*A*ep0*np.cos(alpha*gamma+ph)*(sig0/(r-rs))**6*(B*np.sin(beta*gamma)+1)**6 * \
     ((sig0/(r-rs))**6 * (B*np.sin(beta*gamma)+1)**6 - 1) ) 
 
+# polimero
+Fr = 24*ep0*(1/(r-rs)**2) * ((sig0/(r-rs))**6 *(1-2* (sig0/(r-rs))**6 )) * (r-rs) + (Np/(2*deltad))*((np.log((deltad*2 + sig0)/(r-rs) ) -1) + (deltad*2+sig0))*np.sin(beta*gamma)**2*heaviside(r-(rs+sig0) , 1)*(1-heaviside(r-(deltad*2+rs+sig0) , 1))
+Fg = 2*beta*cos(beta*gamma)*sin(beta*gamma)*(Np/(2*deltad))*((deltad*2 + sig0) + (r-rs) *(np.log((deltad*2 + sig0)/(r-rs) ) -1))*np.sin(beta*gamma)**2*heaviside(r-(rs+sig0) , 1)*(1-heaviside(r-(deltad*2+rs+sig0) , 1))
+###
 # Fr = 24*ep0*(1+A*np.sin(alpha*gamma+ph))*(1/(r-rs)**2) *  ( (sig0*(1+B*abs(np.sin(beta*gamma)))/(r-rs))**6 * (1-2* (sig0*(1+B*abs(np.sin(beta*gamma)))/(r-rs))**6 )) *  (r-rs)
 
 # Fg = (1/(r-rs))* ( (4*ep0*(A*np.sin(alpha*gamma+ph) + 1 ))* (sig0/(r-rs))**6*(B*abs(np.sin(beta*gamma))+1)**5 * \
@@ -66,9 +78,9 @@ np.place(V,abs(V) > 20, np.nan)
 np.place(Fr,abs(Fr) > maxF, np.nan)
 np.place(Fg,abs(Fg) > maxF, np.nan)
 
-plt.figure()
-plt.plot(X[int(len(X)/2),:] ,V[int(len(X)/2),:])
-plt.title("potential")
+# plt.figure()
+# plt.plot(X[int(len(X)/2),:] ,V[int(len(X)/2),:])
+# plt.title("potential")
 
 
 fig1, ax1 = plt.subplots()

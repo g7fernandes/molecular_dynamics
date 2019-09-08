@@ -845,7 +845,7 @@ module fisica
                                 ptr%p%F = aux2 + ptr%p%F +fR
                                 ptrn%p%F = -aux2 + ptrn%p%F - fR
                            else if (rs1 > 0 .and. rs2 == 0) then
-                                gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
 
                                 aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
                                     ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
@@ -869,7 +869,7 @@ module fisica
                                 ! partlst(ptr%p%n - pa) = 1
                                     
                             else if (rs2 > 0 .and. rs1 == 0) then 
-                                gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                 aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
                                     (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -956,7 +956,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     else if (rs1 > 0 .and. rs2 == 0) then
         
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
                                             (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -971,7 +971,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
                                         * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1050,7 +1050,7 @@ module fisica
                                             ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     else if (rs1 > 0 .and. rs2 == 0) then
             
-                                            gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                            gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 &
                                                 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1066,7 +1066,7 @@ module fisica
                                             ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                             ! partlst(ptr%p%n - pa) = 1
                                         else if (rs2 > 0 .and. rs1 == 0) then 
-                                            gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                            gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  & 
                                                 ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1149,7 +1149,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 else if (rs1 > 0 .and. rs2 == 0) then
         
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
                                             ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) &
                                             * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1163,7 +1163,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
                                                 (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
                                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1240,7 +1240,7 @@ module fisica
                                         
                                 else if (rs1 > 0 .and. rs2 == 0) then
         
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
                                             ((sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1254,7 +1254,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
                                             (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1331,7 +1331,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     else if (rs1 > 0 .and. rs2 == 0) then
         
-                                        gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
                                             (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1345,7 +1345,7 @@ module fisica
                                         ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
-                                        gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                        gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
                                             ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1423,7 +1423,7 @@ module fisica
                                             ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     else if (rs1 > 0 .and. rs2 == 0) then
             
-                                            gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                            gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
                                                 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1437,7 +1437,7 @@ module fisica
                                             ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
                                             ! partlst(ptr%p%n - pa) = 1
                                         else if (rs2 > 0 .and. rs1 == 0) then 
-                                            gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                            gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 * &
                                             (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -1516,7 +1516,7 @@ module fisica
                                      ptr%p%F = aux2 + ptr%p%F +fR
                                      ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 else if (rs1 > 0 .and. rs2 == 0) then
-                                     gamma = theta(-pa +ptr%p%n) + atan(coss/sine)
+                                     gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
      
                                      aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
                                          ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
@@ -1537,7 +1537,7 @@ module fisica
                                      ! partlst(ptr%p%n - pa) = 1
      
                                 else if (rs2 > 0 .and. rs1 == 0) then 
-                                    gamma = theta(-pa +ptrn%p%n) + atan(coss/sine)
+                                    gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
@@ -6516,6 +6516,7 @@ program main
     end if
     !! CASE OF RUGGED LENNARD JONES THAT CAN MAKE THE PARTICLE ROTATE
     if (abs(pr(4)+pr(3)) > 0) then ! PARTICLE ROTATES
+        print*, "CASE: Particle Rotates"
         if (id == 0) then
             deallocate(x,v)
             allocate(x(N,3),v(N,3))
@@ -6826,6 +6827,7 @@ program main
         end do 
 
     else if (termostato_nose_hoover) then
+        print*, "CASE: NOSE HOOVER"
         ! TERMOSTATO NOSE HOOVER
         do while (t_fim > t)
             !print*, "L 1990"
@@ -7010,6 +7012,7 @@ program main
 
     else
         ! TERMOSTATO SCALING OU SEM TEMOSTATO
+        print*, "CASE:  SCALING OR NO TERMOSTAT"
         do while (t_fim > t)
             ! COMPF
             call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força
