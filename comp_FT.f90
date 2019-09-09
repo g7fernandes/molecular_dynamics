@@ -176,8 +176,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                             partlst(ptrn%p%n - pa) = 1
                         else
                             ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                            aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                            aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]   
                             ! print*, "L 395 r", r, "id",id
                             ! implementar 24*ep0*(1/(r-rs)**2) * ((sig0/(r-rs))**6 *(1-2* (sig0/(r-rs))**6 )) * (r-rs) + (Np/(2*deltad))*((np.log((deltad*2 + sig0)/(r-rs) ) -1) + (deltad*2+sig0))*heaviside(r-(rs+sig0) , 1)*(1-heaviside(r-(deltad*2+rs+sig0) , 1))
                             ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -264,8 +264,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                     ! print*, "L 395 r", r, "id",id
     
                                     ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -349,8 +349,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]   
                                         ! print*, "L 395 r", r, "id",id
         
                                         ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -436,8 +436,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                     ! print*, "L 395 r", r, "id",id
     
                                     ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -520,8 +520,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                     ! print*, "L 395 r", r, "id",id
     
                                     ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -604,8 +604,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                    aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                     ! print*, "L 395 r", r, "id",id
     
                                     ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
@@ -690,7 +690,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                        aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
+                                        aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                         ! print*, "L 395 r", r, "id",id
         
@@ -783,8 +783,8 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                 partlst(ptrn%p%n - pa) = 1
                             else
                                 ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
-                                aux2 = -(1/r**2)*(sigma*(1+B)/r)**6*(1-2*(sigma*(1+B)/r)**6)*24*epsil*(1+A)* & 
-                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                aux2 = (1/r**2)*(sigma/r)**6*24*epsil* & 
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
                                 ! print*, "L 395 r", r, "id",id
 
                                 ! talvez o fricterm seja interessante em algum momento, vou deixar aqui
