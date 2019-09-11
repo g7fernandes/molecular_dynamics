@@ -24,14 +24,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from random import randint
 
-ff = 8 # formato da região ff = x/y
-Lx = 2000
-arquivo2 = 'particulas8x1.csv'
-arquivo1 = 'moleculas8x1.csv'
+ff = 1 # formato da região ff = x/y
+Lx = 200
+arquivo2 = 'parp.csv'
+arquivo1 = 'molp.csv'
 
-ratio = 0.8
-N1 = 5000
-N2 = 130
+ratio = 0.5
+N1 = 1000
+N2 = 30
 
 L1 = Lx
 L2 = Lx/ff

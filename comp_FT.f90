@@ -1,4 +1,4 @@
-subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,domy, ids, id, t,dt,partlst)
+subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,domy, ids, id, wall, t,dt,partlst)
     use linkedlist
     use mod1
     use data
@@ -20,6 +20,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
     type(data_ptr) :: ptr,ptrn
     integer, intent(out), dimension(:) :: partlst
     integer ( kind = 4 ), intent(in) :: ids(8)
+    character(4), intent(in) :: wall
 
     partlst = 0
     A =     pr(1)
@@ -59,7 +60,19 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
         dox = domx 
         doy = domy 
     end if 
-    
+
+    ! em caso de parede elástica, não precisa ver as celulas fantasma
+    if (wall(1:2) == 'ee') then 
+        if (doy(1) == 1) doy(1) = 2
+        if (doy(2) == mesh(2)+2) doy(2) = mesh(2)+1
+    end if
+
+    if (wall(3:4) == 'ee') then 
+        if (dox(1) == 1) dox(1) = 2
+        if (dox(2) == mesh(1)+2) dox(2) = mesh(1)+1
+    end if
+    !
+
     do i = doy(1),doy(2) ! i é linha
         do j = dox(1),dox(2)
             node => list_next(malha(i,j)%list)
@@ -117,6 +130,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                         sigma = sigma_a
                         epsil = epsil_a
                     end if 
+
                     x2 = ptrn%p%x
                     v2 = ptrn%p%v
                     r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
@@ -133,20 +147,33 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                             fric_term = (fric_term1+fric_term2)/2
                             if (fric_term > 0) then
                                 fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                             end if
                             ptr%p%F = aux2 + ptr%p%F +fR
                             ptrn%p%F = -aux2 + ptrn%p%F - fR
                        else if (rs1 > 0 .and. rs2 == 0) then
                             gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
 
-                            aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                            aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                            aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                            aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) &
+                                + alpha * A * epsil * cos(alpha * gamma) * &
+                                (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+
+                            fric_term = (fric_term1+fric_term2)/2
+                            if (fric_term > 0) then
+                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                            end if
 
                             Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                            ptr%p%F = aux2 + ptr%p%F 
-                            ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                            ptr%p%F = aux2 + ptr%p%F +fR
+                            ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                             ! print*, "r1 >0"
                             ! print*, "ptr%p%F" , ptr%p%F, "particula"
                             ! print*, "ptrn%p%F" , ptrn%p%F
@@ -159,14 +186,26 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                         else if (rs2 > 0 .and. rs1 == 0) then 
                             gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
 
-                            aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                            aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                            aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                            aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) &
+                                + alpha * A * epsil * cos(alpha * gamma) * &
+                                (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
 
+                            fric_term = (fric_term1+fric_term2)/2
+                            if (fric_term > 0) then
+                                fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                            end if
                             
                             Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                            ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                            ptrn%p%F = -aux2 + ptrn%p%F 
+                            ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                            ptrn%p%F = -aux2 + ptrn%p%F -fR
                             ! print*, "r2 > 0"
                             ! print*, "ptr%p%F" , ptr%p%F
                             ! print*, "ptrn%p%F" , ptrn%p%F, "particula"
@@ -184,11 +223,11 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                             fric_term = (fric_term1+fric_term2)/2
                             if (fric_term > 0) then
                                 fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                             end if
 
                             ptr%p%F = aux2 + ptr%p%F +fR
-                            ptrn%p%F = -aux2 + ptrn%p%F - fR
+                            ptrn%p%F = -aux2 + ptrn%p%F -fR
                         end if
                     end if
                     node => list_next(node) ! próxima partícula da célula
@@ -219,6 +258,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                 epsil = epsil_a
                             end if 
 
+
                             x2 = ptrn%p%x
                             v2 = ptrn%p%v
                             r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)
@@ -235,32 +275,58 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
-                                    ptrn%p%F = -aux2 + ptrn%p%F - fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F -fR
                                 else if (rs1 > 0 .and. rs2 == 0) then
     
                                     gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
 
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) *&
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
     
                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                     ! partlst(ptr%p%n - pa) = 1
                                 else if (rs2 > 0 .and. rs1 == 0) then 
                                     gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
 
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
 
                                     Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                    ptrn%p%F = -aux2 + ptrn%p%F 
+                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F -fR
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -272,7 +338,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
     
                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -322,30 +388,56 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
-                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptr%p%F = aux2 + ptr%p%F +fR 
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                else if (rs1 > 0 .and. rs2 == 0) then
+                                    else if (rs1 > 0 .and. rs2 == 0) then
         
                                         gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
-                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                            ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                            [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                        aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                        aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
         
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss,&
+                                            -(x1(2)-x2(2)+B*sin(beta * gamma))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                        end if
+
                                         Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
-                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                        aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                        aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
         
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss,&
+                                            -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                        end if
+
                                         Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                        ptrn%p%F = -aux2 + ptrn%p%F 
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F -fR
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -357,7 +449,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
         
                                         ptr%p%F = aux2 + ptr%p%F +fR
@@ -409,30 +501,56 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
-                            else if (rs1 > 0 .and. rs2 == 0) then
+                                else if (rs1 > 0 .and. rs2 == 0) then
     
                                     gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                            (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                            alpha * A * epsil * cos(alpha * gamma) * &
+                                            (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
     
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                     ! partlst(ptr%p%n - pa) = 1
                                 else if (rs2 > 0 .and. rs1 == 0) then 
                                     gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
     
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss,&
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                    ptrn%p%F = -aux2 + ptrn%p%F 
+                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F -fR
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -444,7 +562,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
     
                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -491,32 +609,58 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
                                     
-                            else if (rs1 > 0 .and. rs2 == 0) then
+                                else if (rs1 > 0 .and. rs2 == 0) then
     
                                     gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                             
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
                             
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                     ! partlst(ptr%p%n - pa) = 1
                                 else if (rs2 > 0 .and. rs1 == 0) then 
                                     gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * & 
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
     
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                    ptrn%p%F = -aux2 + ptrn%p%F 
+                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F -fR
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -528,7 +672,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
     
                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -576,31 +720,54 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
                                 else if (rs1 > 0 .and. rs2 == 0) then
     
                                     gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
     
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F 
-                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                    ptr%p%F = aux2 + ptr%p%F +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                     ! partlst(ptr%p%n - pa) = 1
                                 else if (rs2 > 0 .and. rs1 == 0) then 
                                     gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
                                     
-                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                    aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                    aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                    aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
     
+                                    fric_term = (fric_term1+fric_term2)/2
+                                    if (fric_term > 0) then
+                                        fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                        -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                    end if
+
                                     Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                    ptrn%p%F = -aux2 + ptrn%p%F 
+                                    ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                    ptrn%p%F = -aux2 + ptrn%p%F -fR
                                     partlst(ptrn%p%n - pa) = 1
                                 else
                                     ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -612,7 +779,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                        [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
     
                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -660,33 +827,59 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
         
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
-                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                            -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
-                                else if (rs1 > 0 .and. rs2 == 0) then
+                                    else if (rs1 > 0 .and. rs2 == 0) then
         
                                         gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
                                         
-                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                        aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                        aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                            ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                            (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                            alpha * A * epsil * cos(alpha * gamma) * &
+                                            (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
         
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                        end if
+
                                         Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F 
-                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                        ptr%p%F = aux2 + ptr%p%F +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                         ! partlst(ptr%p%n - pa) = 1
                                     else if (rs2 > 0 .and. rs1 == 0) then 
                                         gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
 
-                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                        aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                        ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                        [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                        aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                        aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                        (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * &
+                                        (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
         
+                                        fric_term = (fric_term1+fric_term2)/2
+                                        if (fric_term > 0) then
+                                            fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                            -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                        end if
+
                                         Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                        ptrn%p%F = -aux2 + ptrn%p%F 
+                                        ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] +fR
+                                        ptrn%p%F = -aux2 + ptrn%p%F -fR
                                         partlst(ptrn%p%n - pa) = 1
                                     else
                                         ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -698,7 +891,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                            [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
         
                                         ptr%p%F = aux2 + ptr%p%F +fR
@@ -710,7 +903,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                         end if
                     end if
                     
-                else ! se for a última lina, só interage com a celua ao lado 
+                else if (j /= mesh(1) + 2) then ! se for a última lina, só interage com a celua ao lado 
                     node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
                     do while (associated(node))
                         ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
@@ -730,7 +923,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                         else 
                             rcut = r_cut*sigma_a + (rs1 + rs2)
                             sigma = sigma_a
-                            epsil = epsil__a
+                            epsil = epsil_a
                         end if 
 
                         x2 = ptrn%p%x
@@ -749,37 +942,58 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                  fric_term = (fric_term1+fric_term2)/2
                                  if (fric_term > 0) then
                                      fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                     [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                     [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                  end if
                                  ptr%p%F = aux2 + ptr%p%F +fR
                                  ptrn%p%F = -aux2 + ptrn%p%F - fR
                             else if (rs1 > 0 .and. rs2 == 0) then
                                  gamma = theta(-pa +ptr%p%n) + atan2(coss,sine)
  
-                                aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                    ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                    (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) &
+                                    + alpha * A * epsil * cos(alpha * gamma) * &
+                                    (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
  
-                                 ! print*, "r1 > 0 gamma", gamma
-                                 ! print*, "aux2, aux3",aux2, aux3
-                                 ! print*, "x1 =", x1
-                                 ! print*, "x2 =", x2
-                                 ! read(*,*)
+                                fric_term = (fric_term1+fric_term2)/2
+                                if (fric_term > 0) then
+                                    fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                    -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                    [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                end if
+
                                 Tor(-pa +ptr%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptr%p%n)
-                                ptr%p%F = aux2 + ptr%p%F 
-                                ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] 
+                                ptr%p%F = aux2 + ptr%p%F +fR
+                                ptrn%p%F = -aux2 + ptrn%p%F - aux3*[sine,-coss] -fR
                                  ! partlst(ptr%p%n - pa) = 1
  
                             else if (rs2 > 0 .and. rs1 == 0) then 
                                 gamma = theta(-pa +ptrn%p%n) + atan2(coss,sine)
 
-                                aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
+                                aux2 = - ( (6 * epsil * sigma**6 * (A * sin(alpha * gamma) + 1) * &
+                                    ((B * sin(beta * gamma) + r)**6 - 2 * sigma**6))/(B * sin(beta * gamma) + r)**13 ) * &
+                                    [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
 
-                                aux3 =  (1/r) * (epsil * (A * sin(alpha * gamma) + 1)* ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
+                                    ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - &
+                                    (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                    alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 &
+                                    - sigma**6/(B * sin(beta * gamma) + r)**6))
+
+                                fric_term = (fric_term1+fric_term2)/2
+                                if (fric_term > 0) then
+                                    fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2+B*sin(beta * gamma))*coss, &
+                                    -(x1(2)-x2(2))+(rs1+rs2+B*sin(beta * gamma))*sine], &
+                                    [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
+                                end if
 
                                 Tor(-pa +ptrn%p%n) =  -aux3*(r+rs1+rs2) + Tor(-pa +ptrn%p%n)
-                                ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss] 
-                                ptrn%p%F = -aux2 + ptrn%p%F 
+                                ptr%p%F = aux2 + ptr%p%F + aux3*[sine,-coss]  +fR 
+                                ptrn%p%F = -aux2 + ptrn%p%F -fR
                                 partlst(ptrn%p%n - pa) = 1
                             else
                                 ! Não vou estudar aqui a interação entre duas partículas, elas vão se repelir como átomos
@@ -791,7 +1005,7 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                 fric_term = (fric_term1+fric_term2)/2
                                 if (fric_term > 0) then
                                     fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                    [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                    [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                 end if
 
                                 ptr%p%F = aux2 + ptr%p%F +fR
@@ -946,7 +1160,7 @@ end subroutine comp_FT
 !                             fric_term = (fric_term1+fric_term2)/2
 !                             if (fric_term > 0) then
 !                                 fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                             end if
 !                             ptr%p%F = aux2 + ptr%p%F +fR
 !                             ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -956,7 +1170,7 @@ end subroutine comp_FT
 !                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
 !                                 ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                             aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                             aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                 ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -979,7 +1193,7 @@ end subroutine comp_FT
 !                             aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
 !                                 (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                 [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                             aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                             aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                 ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                 4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                 ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1005,7 +1219,7 @@ end subroutine comp_FT
 !                             fric_term = (fric_term1+fric_term2)/2
 !                             if (fric_term > 0) then
 !                                 fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                 [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                             end if
 
 !                             ptr%p%F = aux2 + ptr%p%F +fR
@@ -1056,7 +1270,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
 !                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1066,7 +1280,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
 !                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1))*(sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1))*(sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
 !                                         (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
@@ -1081,7 +1295,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
 !                                     * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
 !                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1100,7 +1314,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
     
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -1150,7 +1364,7 @@ end subroutine comp_FT
 !                                         fric_term = (fric_term1+fric_term2)/2
 !                                         if (fric_term > 0) then
 !                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                         end if
 !                                         ptr%p%F = aux2 + ptr%p%F +fR
 !                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1160,7 +1374,7 @@ end subroutine comp_FT
 !                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 &
 !                                             * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                         aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
+!                                         aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
 !                                             (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                             ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)* &
 !                                             (B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
@@ -1176,7 +1390,7 @@ end subroutine comp_FT
 !                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  & 
 !                                             ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                         aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
+!                                         aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* & 
 !                                             (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                             ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 & 
 !                                             - 6*beta*B*cos(beta*gamma)) + &
@@ -1197,7 +1411,7 @@ end subroutine comp_FT
 !                                         fric_term = (fric_term1+fric_term2)/2
 !                                         if (fric_term > 0) then
 !                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                         end if
         
 !                                         ptr%p%F = aux2 + ptr%p%F +fR
@@ -1249,7 +1463,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
 !                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1259,7 +1473,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
 !                                         ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) &
 !                                         * [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1273,7 +1487,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
 !                                             (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * & 
 !                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)*( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))*( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1292,7 +1506,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
     
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -1339,7 +1553,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
 !                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1350,7 +1564,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
 !                                         ((sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1364,7 +1578,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * & 
 !                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1383,7 +1597,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
     
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -1431,7 +1645,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
 !                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1441,7 +1655,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 * &
 !                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1455,7 +1669,7 @@ end subroutine comp_FT
 !                                     aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * &
 !                                         ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                     aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                     aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                         ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                         4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                         ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1474,7 +1688,7 @@ end subroutine comp_FT
 !                                     fric_term = (fric_term1+fric_term2)/2
 !                                     if (fric_term > 0) then
 !                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                         [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                     end if
     
 !                                     ptr%p%F = aux2 + ptr%p%F +fR
@@ -1523,7 +1737,7 @@ end subroutine comp_FT
 !                                         fric_term = (fric_term1+fric_term2)/2
 !                                         if (fric_term > 0) then
 !                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                         end if
 !                                         ptr%p%F = aux2 + ptr%p%F +fR
 !                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1533,7 +1747,7 @@ end subroutine comp_FT
 !                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) *  ( (sigma*(1+B*sin(beta*gamma))/r)**6 &
 !                                             * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                         aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                         aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                             ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1547,7 +1761,7 @@ end subroutine comp_FT
 !                                         aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 * &
 !                                         (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                         aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                         aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                             ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                             4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                             ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1566,7 +1780,7 @@ end subroutine comp_FT
 !                                         fric_term = (fric_term1+fric_term2)/2
 !                                         if (fric_term > 0) then
 !                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                             [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                         end if
         
 !                                         ptr%p%F = aux2 + ptr%p%F +fR
@@ -1617,7 +1831,7 @@ end subroutine comp_FT
 !                                  fric_term = (fric_term1+fric_term2)/2
 !                                  if (fric_term > 0) then
 !                                      fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                      [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                      [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                  end if
 !                                  ptr%p%F = aux2 + ptr%p%F +fR
 !                                  ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1627,7 +1841,7 @@ end subroutine comp_FT
 !                                  aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * & 
 !                                      ( (sigma*(1+B*sin(beta*gamma))/r)**6 * (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                      [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                  aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                  aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                      ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                      4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                      ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1647,7 +1861,7 @@ end subroutine comp_FT
 !                                 aux2 = -24*epsil*(1+A*sin(alpha*gamma+ph))*(1/r**2) * ((sigma*(1+B*sin(beta*gamma))/r)**6 *  &
 !                                     (1-2* (sigma*(1+B*sin(beta*gamma))/r)**6 )) * &
 !                                     [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-!                                 aux3 = (1/r)* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
+!                                 aux3 = (1/(B * sin(beta * gamma) + r))* ( (4*epsil*(A*sin(alpha*gamma+ph) + 1 ))* (sigma/r)**6*(B*sin(beta*gamma)+1)**5 * &
 !                                     ((sigma/r)**6 * 12*beta*B*cos(beta*gamma)*(B*sin(beta*gamma)+1)**6 - 6*beta*B*cos(beta*gamma)) + &
 !                                     4*alpha*A*epsil*cos(alpha*gamma+ph)*(sigma/r)**6*(B*sin(beta*gamma)+1)**6 * &
 !                                     ((sigma/r)**6 * (B*sin(beta*gamma)+1)**6 - 1)) 
@@ -1666,7 +1880,7 @@ end subroutine comp_FT
 !                                 fric_term = (fric_term1+fric_term2)/2
 !                                 if (fric_term > 0) then
 !                                     fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-!                                     [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+!                                     [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
 !                                 end if
 
 !                                 ptr%p%F = aux2 + ptr%p%F +fR

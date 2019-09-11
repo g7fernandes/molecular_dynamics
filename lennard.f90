@@ -9,7 +9,7 @@ module fisica
         real(dp) :: t, Tor
 
         if (t > hfield(5)) then
-            Tor = hfield(1)*(cos(angle)*hfield(3) - sin(angle)*hfield(2))*sin(t*hfield(4))
+            Tor = hfield(1)*(cos(angle)*hfield(3) - sin(angle)*hfield(2))*cos(t*hfield(4))
         else 
             Tor = 0
         end if
@@ -67,12 +67,12 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp), intent(in) :: t,r_cut
-        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut, fric_term !fric_term = força de ficção
+        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut
         real(dp) :: x1(2),v1(2),x2(2),p1(2), rs1, rs2, coss, sine, u   
         real(dp), intent(inout), allocatable, dimension(:) :: nRfu
         integer :: i,j,ct = 0, n1, n2, dox(2), doy(2)
         integer, intent(in) :: mesh(:),domx(2),domy(2), id
-        real(dp) :: Fi(2)=0,r, aux2(2),fR(2), fric_term1, fric_term2
+        real(dp) :: Fi(2)=0,r, aux2(2),fR(2)
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
@@ -108,7 +108,6 @@ module fisica
                     m1 = propriedade(ptr%p%grupo)%m
                     p1 = [v1(1), v1(2)]*m1 
                     rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
-                    fric_term1 = propriedade(ptr%p%grupo)%fric_term
                     sigma_a = propriedade(ptr%p%grupo)%sigma
                     ! rcut = r_cut*sigma
                     epsil_a = propriedade(ptr%p%grupo)%epsilon 
@@ -178,7 +177,6 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
-                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -221,7 +219,6 @@ module fisica
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                     rs2 = propriedade(ptrn%p%grupo)%rs 
-                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
                                         rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -267,7 +264,6 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs
-                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term 
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -311,7 +307,6 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
-                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -353,7 +348,6 @@ module fisica
                                 sigma_b = propriedade(ptrn%p%grupo)%sigma
                                 epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                 rs2 = propriedade(ptrn%p%grupo)%rs 
-                                fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                 ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                 if (sigma_a > sigma_b) then
                                     rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -397,7 +391,6 @@ module fisica
                                     sigma_b = propriedade(ptrn%p%grupo)%sigma
                                     epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                                     rs2 = propriedade(ptrn%p%grupo)%rs 
-                                    fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                                     ! Lorenz-Betherlot rule for mixing epsilon sigma 
                                     if (sigma_a > sigma_b) then
                                         rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -436,14 +429,13 @@ module fisica
                             end if
                         end if
                         
-                    else ! se for a última lina, só interage com a celua ao lado 
+                    else if (j /= mesh(1) + 2) then ! se for a última lina, só interage com a celua ao lado 
                         node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
                         do while (associated(node))
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
                             sigma_b = propriedade(ptrn%p%grupo)%sigma
                             epsil_b = propriedade(ptrn%p%grupo)%epsilon 
                             rs2 = propriedade(ptrn%p%grupo)%rs 
-                            fric_term2 = propriedade(ptrn%p%grupo)%fric_term
                             ! Lorenz-Betherlot rule for mixing epsilon sigma 
                             if (sigma_a > sigma_b) then
                                 rcut = r_cut*sigma_a + (rs1 + rs2)
@@ -696,12 +688,13 @@ module fisica
     end subroutine corr_K
 
     !força de ficção 
-    function comp_fric(r,v,fric_term) result(f)
+    function comp_fric(r,v,fric_term,sigma) result(f)
         use mod1
-        real(dp), intent(in) :: r(2),v(2),fric_term
-        real(dp) :: f(2)
+        real(dp), intent(in) :: r(2),v(2),fric_term,sigma
+        real(dp) :: f(2),aux
         
-        f = (fric_term/(r(1)**2 + r(2)**2))*(v(1)*r(1)+v(2)*r(2))*[r(1),r(2)]
+        aux = (0.56*sigma**2*fric_term/(r(1)**2 + r(2)**2)**2)
+        if (aux > 0) f = aux*(v(1)*r(1)+v(2)*r(2))*[r(1),r(2)]
     end function comp_fric     
 
     ! atualiza forças
@@ -709,7 +702,7 @@ module fisica
     include 'comp_FT.f90'
     
     ! atualiza forças
-    subroutine comp_F(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id, t)
+    subroutine comp_F(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id,wall, t)
         use linkedlist
         use mod1
         use data
@@ -727,11 +720,13 @@ module fisica
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
+        character(4), intent(in) :: wall
  
         !Lennard Jones
         fR = [0,0]
         dox = domx 
         doy = domy 
+
         if (sum(ids(1:4)) > -4) then
             !caso paralelo
             if (domx(1) > 1) dox(1) = domx(1) - 1
@@ -742,7 +737,18 @@ module fisica
             dox = domx 
             doy = domy 
         end if 
-        
+        ! em caso de parede elástica, não precisa ver as celulas fantasma
+        if (wall(1:2) == 'ee') then 
+            if (doy(1) == 1) doy(1) = 2
+            if (doy(2) == mesh(2)+2) doy(2) = mesh(2)+1
+        end if
+
+        if (wall(3:4) == 'ee') then 
+            if (dox(1) == 1) dox(1) = 2
+            if (dox(2) == mesh(1)+2) dox(2) = mesh(1)+1
+        end if
+
+
         do i = doy(1),doy(2) ! i é linha
             do j = dox(1),dox(2)
                 node => list_next(malha(i,j)%list)
@@ -802,13 +808,11 @@ module fisica
                         if (r <= rcut) then
                             aux2 = -(1/r**2)*(sigma/r)**6*(1-2*(sigma/r)**6)*24*epsil* & 
                             [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]  
-                            ! print*, "L 395 r", r, "id",id
-  !print '("(x1(1)-x2(1)) ", f7.3 ," (rs1+rs2)*coss ", f7.3, " (x1(2)-x2(2)) ", f7.3, " (rs1+rs2)*sine ", f7.3 )', (x1(1)-x2(1)), &
-  !(rs1+rs2)*coss, (x1(2)-x2(2)), (rs1+rs2)*sine
+
                             fric_term = (fric_term1+fric_term2)/2
                             if (fric_term > 0) then
                                 fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                             end if
                             ptr%p%F = aux2 + ptr%p%F +fR
                             ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -854,7 +858,7 @@ module fisica
                                     fric_term = (fric_term1+fric_term2)/2 
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -898,7 +902,7 @@ module fisica
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -945,7 +949,7 @@ module fisica
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -987,7 +991,7 @@ module fisica
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1030,7 +1034,7 @@ module fisica
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
                                         fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                     end if
                                     ptr%p%F = aux2 + ptr%p%F +fR
                                     ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1074,7 +1078,7 @@ module fisica
                                         fric_term = (fric_term1+fric_term2)/2
                                         if (fric_term > 0) then
                                             fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                         end if
                                         ptr%p%F = aux2 + ptr%p%F +fR
                                         ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1084,7 +1088,7 @@ module fisica
                             end if
                         end if
                         
-                    else ! se for a última lina, só interage com a celua ao lado 
+                    else if (j /= mesh(1) + 2) then ! se for a última lina, só interage com a celua ao lado 
                         node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
                         do while (associated(node))
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
@@ -1104,7 +1108,7 @@ module fisica
                             else 
                                 rcut = r_cut*sigma_a + (rs1 + rs2)
                                 sigma = sigma_a
-                                epsil = epsil__a
+                                epsil = epsil_a
                             end if 
 
                             x2 = ptrn%p%x
@@ -1120,7 +1124,7 @@ module fisica
                                 fric_term = (fric_term1+fric_term2)/2
                                 if (fric_term > 0) then
                                     fR = comp_fric([-(x1(1)-x2(1))+ (rs1+rs2)*coss,-(x1(2)-x2(2))+(rs1+rs2)*sine], &
-                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term)
+                                [-(v1(1)-v2(1)),-(v1(2)-v2(2))],fric_term,sigma)
                                 end if
                                 ptr%p%F = aux2 + ptr%p%F +fR
                                 ptrn%p%F = -aux2 + ptrn%p%F - fR
@@ -1137,7 +1141,7 @@ module fisica
         ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
     end subroutine comp_F
 
-    subroutine comp_F_thermo(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id, t)
+    subroutine comp_F_thermo(GField, mesh,malha,propriedade,r_cut,domx,domy, ids, id, wall,t)
         use linkedlist
         use mod1
         use data
@@ -1155,12 +1159,13 @@ module fisica
         type(list_t), pointer :: node, next_node
         type(data_ptr) :: ptr,ptrn
         integer ( kind = 4 ), intent(in) :: ids(8)
+        character(4), intent(in) :: wall
  
         !Lennard Jones
         dox = domx 
         doy = domy 
         if (sum(ids(1:4)) > -4) then
-            !caso paralelo
+            ! print*, "caso paralelo"
             if (domx(1) > 1) dox(1) = domx(1) - 1
             if (domy(1) > 1) doy(1) = domy(1) - 1
             if (domx(2) < mesh(1)+2) dox(2) = domx(2) + 1
@@ -1169,7 +1174,18 @@ module fisica
             dox = domx 
             doy = domy 
         end if 
-        
+
+        ! em caso de parede elástica, não precisa ver as celulas fantasma
+        if (wall(1:2) == 'ee') then 
+            if (doy(1) == 1) doy(1) = 2
+            if (doy(2) == mesh(2)+2) doy(2) = mesh(2)+1
+        end if
+
+        if (wall(3:4) == 'ee') then 
+            if (dox(1) == 1) dox(1) = 2
+            if (dox(2) == mesh(1)+2) dox(2) = mesh(1)+1
+        end if
+
         do i = doy(1),doy(2) ! i é linha
             do j = dox(1),dox(2)
                 node => list_next(malha(i,j)%list)
@@ -1467,7 +1483,7 @@ module fisica
                             end if
                         end if
                         
-                    else ! se for a última lina, só interage com a celua ao lado 
+                    else if (j /= mesh(1) + 2) then ! se for a última lina, só interage com a celua ao lado 
                         node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
                         do while (associated(node))
                             ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
@@ -1551,7 +1567,6 @@ module fisica
         east = wall(3:3)
         west = wall(4:4)
         !  if (id == 0) read(*,*) 
-      
          ! Esvazia as celulas emprestadas 
         if (domy(1) > 1) then
             i = domy(1)-1
@@ -4902,6 +4917,7 @@ module fisica
                             end if 
                         end do
                     end do
+                    
                     i = 2 ! copiada pra celula fantasma do lado oposto 
                     do j = domx(1),domx(2)
                         previous_node => malha(i,j)%list
@@ -4987,9 +5003,9 @@ module fisica
                             ! print*, "n", ptr%p%x 
                             allocate(ptrn%p)
                             ptrn%p = ptr%p 
-                            ptrn%p%x(1) = ptr%p%x(1) + jcell(mesh(1)+1)
-                            ptr%p%flag = .true. 
-                            call list_insert(malha(i,mesh(1)+2)%list, data=transfer(ptr,list_data))
+                            ptrn%p%x(1) = ptrn%p%x(1) + jcell(mesh(1)+1)
+                            ptrn%p%flag = .true. 
+                            call list_insert(malha(i,mesh(1)+2)%list, data=transfer(ptrn,list_data))
                             node => list_next(node)    
                         end do
                     end do  
@@ -5058,7 +5074,7 @@ module fisica
                             ptrn%p = ptr%p 
                             ptrn%p%x(1) = ptr%p%x(1) - jcell(mesh(1)+1)
                             ptrn%p%flag = .true. 
-                            call list_insert(malha(i,1)%list, data=transfer(ptr,list_data))
+                            call list_insert(malha(i,1)%list, data=transfer(ptrn,list_data))
                             node => list_next(node)    
                         end do
                     end do  
@@ -5460,7 +5476,8 @@ program main
     end if
     i = 0
     
-    if (Td == 0) then
+    if (Td == 0 .and. (termostato_nose_hoover .or. termostato_vel_scaling)) then
+        print*, "TD = 0. The desired temperature will be defined by the given velocities."
         Td = (2/(2*N*kb))*sum(0.5*propriedade(ptr%p%grupo)%m*(v(:,1)**2+v(:,2)**2))
     else if (Td < 0 .and. (Td_hot*Td_hot) <= 0) then
         interv_Td = -1
@@ -5687,13 +5704,24 @@ program main
         theta = PI*theta
         partlst = 0
         omega = 0
+
+        if (Td > 0) then 
+            print*, "Global temperature specified. Td = ", Td 
+        else if (Td_cold > 0) then
+            print*, "Regional temperatures specified:", Td_cold, Td_hot
+        else
+            print*, "No temperature specified!"
+        end if
         ! Calcula a rotação da partícula. Velocity scaling.
         do while (t_fim > t)
             ! COMPF
-            ! if (id == 0) read(*,*)
-            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
-            ! print*, "L 6544"
-            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera Força
+            ! if (id == 0) then
+            !     ! print*, t
+            !     read(*,*)
+            ! end if 
+            call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! print*, "L 6544", id
+            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t,dt,partlst)  !altera Força
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
@@ -5701,14 +5729,14 @@ program main
             ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
-            ! print*, "L 6408"
+            ! print*, "L 6408", id
             if (propriedade(gruporot)%x_lockdelay > t) omega = 0
             theta = theta*partlst
             omega = omega*partlst
 
             ! COMP X
             call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
-            ! print*, "L 6460"
+            ! print*, "L 6460", id
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
@@ -5756,9 +5784,7 @@ program main
                     ! aux5(num_rot+1:2*num_rot) = omega ! " " ", omega
                     ! aux5(2*num_rot+1:3*num_rot) = Tor ! " " ", Tor
                 end if
-            end if
-            ! print*, "L 6609", np
-            if (np > 1) then
+            
                 call MPI_BCAST(aux5, 3*num_rot, MPI_DOUBLE_PRECISION, 0, MPI_COMM_WORLD, ierr)
                 if (id /= 0) then 
                     theta = aux5(1:num_rot)
@@ -5767,11 +5793,21 @@ program main
                 end if 
             end if 
                 
+            ! do aux4 = 0, 3
+            !     if (id == aux4) then 
+            !         print*, "ID #### THETA", id
+            !         print*, theta 
+            !         print*, "########"
+            !     end if
+            !     call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! end do
+
+
             ! print*, "L 6619"
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             ! print*, "L 6621"
             ! COMP F 
-            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,t,dt,partlst)  !altera força
+            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t,dt,partlst)  !altera força
             ! print*, "L 6470",tor
             ! print*, "L 6625"
             ! print*, "tor", tor
@@ -5811,8 +5847,7 @@ program main
                 if (termostato_vel_scaling .and. i == interv_Td(j2)) then
                     if (Td > 0) then
                         call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
-                    end if
-                    if (Td_hot > 0 .and. Td_cold > 0) then
+                    else if (Td_cold > 0) then
                         call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
                     end if
                     ! j2 = j2 + 1
@@ -5997,7 +6032,7 @@ program main
             !print*, "L 1990"
 
             ! COMPF
-            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força
+            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t)  !altera Força
             ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
@@ -6014,7 +6049,7 @@ program main
             call comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
 
             ! COMP F 
-            call comp_F_thermo(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t) !altera força
+            call comp_F_thermo(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t) !altera força
 
             ! COMP V
             call comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells)
@@ -6177,10 +6212,18 @@ program main
     else
         ! TERMOSTATO SCALING OU SEM TEMOSTATO
         if (id==0) print*, "CASE: SCALING OR NO TERMOSTAT"
+        if (Td > 0) then 
+            print*, "Global temperature specified. Td = ", Td 
+        else if (Td_cold > 0) then
+            print*, "Regional temperatures specified:", Td_cold, Td_hot
+        else
+            print*, "No temperature specified!"
+        end if
+        
         do while (t_fim > t)
             ! COMPF
             ! print*, "L 6151"
-            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t)  !altera Força
+            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t)  !altera Força
             ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
@@ -6195,12 +6238,10 @@ program main
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             
             ! COMP F 
-            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,t) !altera força
-            ! print*, "L 1717"
+            call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t) !altera força
 
             ! COMP V
             call comp_v(malha,mesh,dt,t,propriedade,domx,domy) !altera velocidade
-            ! print*, "1721"
 
             t = t + dt
             cont2 = cont2+1
@@ -6225,8 +6266,7 @@ program main
                 if (termostato_vel_scaling .and. i == interv_Td(j2)) then
                     if (Td > 0) then
                         call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
-                    end if
-                    if (Td_hot > 0 .and. Td_cold > 0) then
+                    else if (Td_cold > 0) then
                         call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
                     end if
                     ! j2 = j2 + 1

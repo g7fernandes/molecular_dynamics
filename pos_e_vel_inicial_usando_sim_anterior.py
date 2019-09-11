@@ -17,6 +17,7 @@ for a in range(len(dirlist)):
 a = int(input("Enter the number of the folder\n"))
 res_dir = dirlist[a]
 
+
 zip_positions = ZipFile(res_dir+'/positions.zip','r')
 zip_velocities = ZipFile(res_dir+'/velocities.zip','r')
 
