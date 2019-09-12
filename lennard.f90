@@ -106,7 +106,7 @@ module fisica
                     v1 = ptr%p%v
                     n1 = ptr%p%n
                     m1 = propriedade(ptr%p%grupo)%m
-                    p1 = [v1(1), v1(2)]*m1 
+                    p1 = [m1, m1*(v1(2)**2+v1(1)**2)/2] ! Antes aqui era momento linear, mas é desnecessário. Inclui a m1 para não ter que reestruturar todo o programa
                     rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
                     sigma_a = propriedade(ptr%p%grupo)%sigma
                     ! rcut = r_cut*sigma
@@ -5681,6 +5681,7 @@ program main
         end if
         if (id == 0) call system('mkdir temp2')
     end if
+
     !! CASE OF RUGGED LENNARD JONES THAT CAN MAKE THE PARTICLE ROTATE
     if (abs(pr(4)+pr(3)) > 0) then ! PARTICLE ROTATES
         if (id == 0) print*, "CASE: Particle Rotates"
