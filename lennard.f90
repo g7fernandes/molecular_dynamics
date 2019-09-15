@@ -67,7 +67,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         real(dp), intent(in) :: t,r_cut
-        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut
+        real(dp) :: sigma, epsil, sigma_a, epsil_a,sigma_b, epsil_b, rcut, m1
         real(dp) :: x1(2),v1(2),x2(2),p1(2), rs1, rs2, coss, sine, u   
         real(dp), intent(inout), allocatable, dimension(:) :: nRfu
         integer :: i,j,ct = 0, n1, n2, dox(2), doy(2)
@@ -106,7 +106,7 @@ module fisica
                     v1 = ptr%p%v
                     n1 = ptr%p%n
                     m1 = propriedade(ptr%p%grupo)%m
-                    p1 = [m1, m1*(v1(2)**2+v1(1)**2)/2] ! Antes aqui era momento linear, mas é desnecessário. Inclui a m1 para não ter que reestruturar todo o programa
+                    p1 = [m1*(v1(2)**2+v1(1)**2)/2.0, m1] ! Antes aqui era momento linear, mas é desnecessário. Inclui a m1 para não ter que reestruturar todo o programa
                     rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
                     sigma_a = propriedade(ptr%p%grupo)%sigma
                     ! rcut = r_cut*sigma
@@ -1533,7 +1533,7 @@ module fisica
  
     
     ! atualiza posições
-    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np)
+    subroutine comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np)
         use linkedlist
         use mod1
         use data
@@ -1547,6 +1547,7 @@ module fisica
         ! integer, intent(inout) :: mic(:)
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2,auxi
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
+        integer, intent(inout) :: mic(:,:)
         logical :: laux
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, dx_max
@@ -1886,49 +1887,53 @@ module fisica
                         end if
 
                         ! CASO PERIODICO
+                        if (np == 4) then
+                            if (east == 'p' .and. cell(2) == mesh(1)+2 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
+                                ! 6 elementos
+                                LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                                ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                ! 4 elementos
+                                ! print*, "> id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
 
-                        if (east == 'p' .and. cell(2) == mesh(1)+2 ) then
-                            ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
-                            ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
-                            ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            ! 4 elementos
-                            ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
+                                cont_db(3) = cont_db(3) + 6
+                                cont_int(3) = cont_int(3) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) + 1
+                            end if 
+                            if (west == 'p' .and. cell(2) == 1 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                ! print*, "domx", domx
+                                LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
+                                    [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(4) = cont_db(4) + 6
+                                cont_int(4) = cont_int(4) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) - 1
+                            end if 
+                            if (north == 'p' .and. cell(1) == mesh(2)+2  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
+                                ! print*, "> id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                    [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                                LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
 
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
-                        end if 
-                        if (west == 'p' .and. cell(2) == 1) then
-                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            ! print*, "domx", domx
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
-                                [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
-
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
-                        end if 
-                        if (north == 'p' .and. cell(1) == mesh(2)+2) then
-                            ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
-                            ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
-
-                            cont_db(2) = cont_db(2) + 6
-                            cont_int(2) = cont_int(2) + 4
-                        end if 
-                        if (south == 'p' .and. cell(1) == 1) then
-                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
- 
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-                        end if                        
-
+                                cont_db(1) = cont_db(1) + 6
+                                cont_int(1) = cont_int(1) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) - 1
+                            end if 
+                            if (south == 'p' .and. cell(1) == 1  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
+                                    [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(2) = cont_db(2) + 6
+                                cont_int(2) = cont_int(2) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) + 1
+                            end if                        
+                        end if
                         !!! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO !!!
 
                         ! Antes aqui tinha um else para o caso de não mudar de processo. 
@@ -1988,41 +1993,44 @@ module fisica
                         if (east == 'p' .and. cell(2) == mesh(1)+1) then
                             !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                            
 
                         else if (west == 'p' .and. cell(2) == 2) then
                             !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
                                 [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+                            
                         end if
                         
                         if (south == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = &
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
                                 [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_N(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-
-                        elseif (north == 'p' .and. cell(1) == 2) then
-                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_S(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
-                        !  ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
+                            
+                        elseif (north == 'p' .and. cell(1) == 2) then
+                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
+                        !  print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+                            
                         end if
                        
                         previous_node => node
@@ -2104,7 +2112,7 @@ module fisica
             end do
 
             !Caso Periódico. Só será necessário se os domínios dos processos formarem região 2x2 
-            if (wall == 'pppp') then
+            if (wall == 'pppp' .and. sum(ids(4:8)) > -4) then
                 ! Primeiro transfere para as celulas emprestadas (periodico)
                 ! O x aqui tem outra função
                 !extremidades arestas norte e sul
@@ -2329,25 +2337,33 @@ module fisica
         
         ! print*, "L 854", id
         ! if (id == 0) read(*,*)
-        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+        call MPI_barrier(MPI_COMM_WORLD, ierr)
         ! print*, "L SOMA", (ids(1) + ids(2) + ids(3) +ids(4)), "id", id  
         ! print*, "enviando"
         if (np > 1) then !se for paralelo 
             ! print*, 'L 862 >> id', id
             ! call MPI_SEND(BUF, COUNT, DATATYPE, DEST, TAG, COMM, IERROR)
-            tag = 1
+            tag = 11
             if (ids(1) >= 0) call MPI_SEND(LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 12
             if (ids(2) >= 0) call MPI_SEND(LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION, ids(2), tag,MPI_COMM_WORLD, ierr)   
+            tag = 13
             if (ids(3) >= 0) call MPI_SEND(LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION, ids(3), tag,MPI_COMM_WORLD, ierr)   
+            tag = 14
             if (ids(4) >= 0) call MPI_SEND(LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION, ids(4), tag,MPI_COMM_WORLD, ierr)   
+            tag = 15
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if 
-            tag = 2 
+            tag = 21 
             if (ids(1) >= 0) call MPI_SEND(LT%lstrint_N, cont_int(1), MPI_integer, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 22
             if (ids(2) >= 0) call MPI_SEND(LT%lstrint_S, cont_int(2), MPI_integer, ids(2), tag,MPI_COMM_WORLD, ierr)
+            tag = 23
             if (ids(3) >= 0) call MPI_SEND(LT%lstrint_E, cont_int(3), MPI_integer, ids(3), tag,MPI_COMM_WORLD, ierr)
+            tag = 24
             if (ids(4) >= 0) call MPI_SEND(LT%lstrint_W, cont_int(4), MPI_integer, ids(4), tag,MPI_COMM_WORLD, ierr)
+            tag = 25
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrint_D, cont_int(destD), MPI_integer, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if
@@ -2355,60 +2371,72 @@ module fisica
             cont_db = 0
             cont_int = 0
             ! print*, "L 935 TUDO ENVIADO", id
-            tag = 1
+            tag = 12
+            ! print*, "ID", id, "IDS", ids
             if (ids(1) >= 0) then  
+                ! print*, id, "> ID recebe de", ids(1)
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION , cont_db(1) , ierr )
+                ! print*, id, "ID recebe", cont_db(1), "de", ids(1)
                 call MPI_RECV (LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-            
+            tag = 11
             if (ids(2) >= 0) then 
+                ! print*, id, "> ID recebe de", ids(2)
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(2) , ierr )
+                ! print*, id, "ID recebe", cont_db(2), "de", ids(2)
                 call MPI_RECV (LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION,ids(2), tag, MPI_COMM_WORLD, status, ierr)
-            
             end if 
+            tag = 14
             if (ids(3) >= 0) then
+                ! print*, id, "> ID recebe de", ids(3)
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(3) , ierr )
+                ! print*, id, "ID recebe", cont_db(3), "de", ids(3)
                 call MPI_RECV (LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
+            tag = 13
             if (ids(4) >= 0) then
+                ! print*, id, "> ID recebe de", ids(4)
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(4) , ierr )
+                ! print*, id, "ID recebe", cont_db(4), "de", ids(4)
                 call MPI_RECV (LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
-            tag = 2
+            ! print*, id, "db receb"
+            tag = 22
             if (ids(1) >= 0) then
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(1) , ierr )
                 call MPI_RECV (LT%lstrint_N, cont_int(1), MPI_integer,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 21
             if (ids(2) >= 0) then
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(2) , ierr )
                 call MPI_RECV (LT%lstrint_S, cont_int(2), MPI_integer,ids(2), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 24
             if (ids(3) >= 0) then
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(3) , ierr )
                 call MPI_RECV (LT%lstrint_E, cont_int(3), MPI_integer,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if
+            tag = 23
             if (ids(4) >= 0) then
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(4) , ierr )
                 call MPI_RECV (LT%lstrint_W, cont_int(4), MPI_integer,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if
             if (sum(ids(5:8)) > -4) then
-                tag = 1
+                tag = 15
                 ! RECEBE DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
                 call MPI_RECV (LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
-                tag = 2
+                tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
@@ -2442,7 +2470,7 @@ module fisica
             ! if (id == 0)  read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             ! print*, "Tudo recebido", id
-            !  call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             !  print*, 'ID APOS BARREIRA', id
             ! print*, "L 1033"
             do j = 1,4
@@ -2527,7 +2555,7 @@ module fisica
         ! call MPI_barrier(MPI_COMM_WORLD, ierr)
     end subroutine comp_x
 
-    subroutine comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,id, np)
+    subroutine comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np)
         use linkedlist
         use mod1
         use data
@@ -2539,6 +2567,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
+        integer, intent(inout) :: mic(:,:)
         integer, intent(in) :: N,mesh(2),domx(2),domy(2)
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, dx_max
@@ -2865,49 +2894,53 @@ module fisica
                         end if
 
                         ! CASO PERIODICO
+                        if (np == 4) then
+                            if (east == 'p' .and. cell(2) == mesh(1)+2 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
+                                ! 6 elementos
+                                LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                                ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                ! 4 elementos
+                                ! print*, "> id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
 
-                        if (east == 'p' .and. cell(2) == mesh(1)+2 ) then
-                            ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
-                            ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
-                            ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            ! 4 elementos
-                            ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
+                                cont_db(3) = cont_db(3) + 6
+                                cont_int(3) = cont_int(3) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) + 1
+                            end if 
+                            if (west == 'p' .and. cell(2) == 1 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                ! print*, "domx", domx
+                                LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
+                                    [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(4) = cont_db(4) + 6
+                                cont_int(4) = cont_int(4) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) - 1
+                            end if 
+                            if (north == 'p' .and. cell(1) == mesh(2)+2  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
+                                ! print*, "> id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                    [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                                LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
 
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
-                        end if 
-                        if (west == 'p' .and. cell(2) == 1) then
-                            ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            ! print*, "domx", domx
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
-                                [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
-
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
-                        end if 
-                        if (north == 'p' .and. cell(1) == mesh(2)+2) then
-                            ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
-                            ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
-
-                            cont_db(2) = cont_db(2) + 6
-                            cont_int(2) = cont_int(2) + 4
-                        end if 
-                        if (south == 'p' .and. cell(1) == 1) then
-                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
- 
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-                        end if                        
-
+                                cont_db(1) = cont_db(1) + 6
+                                cont_int(1) = cont_int(1) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) - 1
+                            end if 
+                            if (south == 'p' .and. cell(1) == 1  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
+                                    [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(2) = cont_db(2) + 6
+                                cont_int(2) = cont_int(2) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) + 1
+                            end if                        
+                        end if
                         !!! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO !!!
 
                         ! Antes aqui tinha um else para o caso de não mudar de processo. 
@@ -2962,48 +2995,51 @@ module fisica
                             cont_int(1) = cont_int(1) + 4
                         end if
 
-                        ! CASO PERIODICO 
+                         ! CASO PERIODICO 
 
                         if (east == 'p' .and. cell(2) == mesh(1)+1) then
                             !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                            
 
                         else if (west == 'p' .and. cell(2) == 2) then
                             !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
                                 [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+                            
                         end if
                         
                         if (south == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = &
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
                                 [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_N(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-
-                        elseif (north == 'p' .and. cell(1) == 2) then
-                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_S(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
-                        !  ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
+                            
+                        elseif (north == 'p' .and. cell(1) == 2) then
+                            ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
+                            !  print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+                            
                         end if
-                       
+
                         previous_node => node
                         node => list_next(node)
                         ! print*, "L740 FORÇA", ptr%p%F, id
@@ -3314,19 +3350,27 @@ module fisica
         if (np > 1) then !se for paralelo 
             ! print*, 'L 862 >> id', id
             ! call MPI_SEND(BUF, COUNT, DATATYPE, DEST, TAG, COMM, IERROR)
-            tag = 1
+            tag = 11
             if (ids(1) >= 0) call MPI_SEND(LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 12
             if (ids(2) >= 0) call MPI_SEND(LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION, ids(2), tag,MPI_COMM_WORLD, ierr)   
+            tag = 13
             if (ids(3) >= 0) call MPI_SEND(LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION, ids(3), tag,MPI_COMM_WORLD, ierr)   
+            tag = 14
             if (ids(4) >= 0) call MPI_SEND(LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION, ids(4), tag,MPI_COMM_WORLD, ierr)   
+            tag = 15
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if 
-            tag = 2 
+            tag = 21 
             if (ids(1) >= 0) call MPI_SEND(LT%lstrint_N, cont_int(1), MPI_integer, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 22
             if (ids(2) >= 0) call MPI_SEND(LT%lstrint_S, cont_int(2), MPI_integer, ids(2), tag,MPI_COMM_WORLD, ierr)
+            tag = 23
             if (ids(3) >= 0) call MPI_SEND(LT%lstrint_E, cont_int(3), MPI_integer, ids(3), tag,MPI_COMM_WORLD, ierr)
+            tag = 24
             if (ids(4) >= 0) call MPI_SEND(LT%lstrint_W, cont_int(4), MPI_integer, ids(4), tag,MPI_COMM_WORLD, ierr)
+            tag = 25
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrint_D, cont_int(destD), MPI_integer, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if
@@ -3334,60 +3378,72 @@ module fisica
             cont_db = 0
             cont_int = 0
             ! print*, "L 935 TUDO ENVIADO", id
-            tag = 1
+            tag = 12
+            ! print*, "ID", id, "IDS", ids
             if (ids(1) >= 0) then  
+                ! print*, id, "> ID recebe de", ids(1)
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION , cont_db(1) , ierr )
+                ! print*, id, "ID recebe", cont_db(1), "de", ids(1)
                 call MPI_RECV (LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-            
+            tag = 11
             if (ids(2) >= 0) then 
+                ! print*, id, "> ID recebe de", ids(2)
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(2) , ierr )
+                ! print*, id, "ID recebe", cont_db(2), "de", ids(2)
                 call MPI_RECV (LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION,ids(2), tag, MPI_COMM_WORLD, status, ierr)
-            
             end if 
+            tag = 14
             if (ids(3) >= 0) then
+                ! print*, id, "> ID recebe de", ids(3)
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(3) , ierr )
+                ! print*, id, "ID recebe", cont_db(3), "de", ids(3)
                 call MPI_RECV (LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
+            tag = 13
             if (ids(4) >= 0) then
+                ! print*, id, "> ID recebe de", ids(4)
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(4) , ierr )
+                ! print*, id, "ID recebe", cont_db(4), "de", ids(4)
                 call MPI_RECV (LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
-            tag = 2
+            ! print*, id, "db receb"
+            tag = 22
             if (ids(1) >= 0) then
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(1) , ierr )
                 call MPI_RECV (LT%lstrint_N, cont_int(1), MPI_integer,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 21
             if (ids(2) >= 0) then
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(2) , ierr )
                 call MPI_RECV (LT%lstrint_S, cont_int(2), MPI_integer,ids(2), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 24
             if (ids(3) >= 0) then
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(3) , ierr )
                 call MPI_RECV (LT%lstrint_E, cont_int(3), MPI_integer,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if
+            tag = 23
             if (ids(4) >= 0) then
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(4) , ierr )
                 call MPI_RECV (LT%lstrint_W, cont_int(4), MPI_integer,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if
             if (sum(ids(5:8)) > -4) then
-                tag = 1
+                tag = 15
                 ! RECEBE DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
                 call MPI_RECV (LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
-                tag = 2
+                tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
@@ -3507,7 +3563,7 @@ module fisica
     end subroutine comp_xT
 
     ! atualiza posições
-    subroutine comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,id,np,xih,xic,cold_cells,hot_cells)
+    subroutine comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,cold_cells,hot_cells)
         use linkedlist
         use mod1
         use data
@@ -3521,6 +3577,7 @@ module fisica
         ! integer, intent(inout) :: mic(:)
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
         integer, intent(in) :: N,mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4)
+        integer, intent(inout) :: mic(:,:)
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, xih, xic
         character(4), intent(in) :: wall
@@ -3828,48 +3885,53 @@ module fisica
                         end if
 
                         ! CASO PERIODICO
+                        if (np == 4) then 
+                            if (east == 'p' .and. cell(2) == mesh(1)+2 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
+                                ! 6 elementos
+                                LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                                ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                ! 4 elementos
+                                ! print*, "> id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
 
-                        if (east == 'p' .and. cell(2) == mesh(1)+2 ) then
-                            ! print*, "L 538",  cell(1), cell(2),"part", ptr%p%n,"i,j", i, j
-                            ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
-                            ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            ! 4 elementos
-                            ! print*, "id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1), 2,ptr%p%n,ptr%p%grupo]
+                                cont_db(3) = cont_db(3) + 6
+                                cont_int(3) = cont_int(3) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) + 1
+                            end if 
+                            if (west == 'p' .and. cell(2) == 1 .and. (ids(3) + ids(4)) /= -2) then
+                                ! print*, "L 554",  cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                ! print*, "domx", domx
+                                LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
+                                    [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(4) = cont_db(4) + 6
+                                cont_int(4) = cont_int(4) + 4
+                                mic(ptr%p%n, 1) = mic(ptr%p%n, 1) - 1
+                            end if 
+                            if (north == 'p' .and. cell(1) == mesh(2)+2  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
+                                ! print*, "> id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                    [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
+                                LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
 
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
-                        end if 
-                        if (west == 'p' .and. cell(2) == 1) then
-
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
-                                [x(1)+ jcell(mesh(1)+1), x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+1,ptr%p%n,ptr%p%grupo]
-
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
-                        end if 
-                        if (north == 'p' .and. cell(1) == mesh(2)+2) then
-                            ! print*, "L 567",  cell(1), cell(2),  "part", ptr%p%n, "i,j", i, j
-                            ! print*, "id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [2,cell(2),ptr%p%n,ptr%p%grupo]
-
-                            cont_db(2) = cont_db(2) + 6
-                            cont_int(2) = cont_int(2) + 4
-                        end if 
-                        if (south == 'p' .and. cell(1) == 1) then
-                            ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
-                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
- 
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-                        end if                        
-
+                                cont_db(1) = cont_db(1) + 6
+                                cont_int(1) = cont_int(1) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) - 1
+                            end if 
+                            if (south == 'p' .and. cell(1) == 1  .and. (ids(1) + ids(2)) /= -2) then
+                                ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
+                                LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
+                                    [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                                LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [mesh(2)+1,cell(2),ptr%p%n,ptr%p%grupo]
+                                ! print*, "> id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                                cont_db(2) = cont_db(2) + 6
+                                cont_int(2) = cont_int(2) + 4
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) + 1
+                            end if                        
+                        end if
                         !!! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO !!!
 
                         ! Antes aqui tinha um else para o caso de não mudar de processo. 
@@ -3929,41 +3991,44 @@ module fisica
                         if (east == 'p' .and. cell(2) == mesh(1)+1) then
                             !!! ! print*, "L 538",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             ! 6 elementos
-                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
+                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = [x(1)- jcell(mesh(1)+1),x(2), &
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
-                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(4) = cont_db(4) + 6
-                            cont_int(4) = cont_int(4) + 4
+                            cont_db(3) = cont_db(3) + 6
+                            cont_int(3) = cont_int(3) + 4
+                            
 
                         else if (west == 'p' .and. cell(2) == 2) then
                             !!! ! print*, "L 554",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_E(cont_db(3)+1:cont_db(3)+6) = &
+                            LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
                                 [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(3) = cont_db(3) + 6
-                            cont_int(3) = cont_int(3) + 4
+                            cont_db(4) = cont_db(4) + 6
+                            cont_int(4) = cont_int(4) + 4
+                            
                         end if
                         
                         if (south == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_N(cont_db(2)+1:cont_db(2)+6) = &
+                            LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
                                 [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_N(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
                             ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                            cont_db(1) = cont_db(1) + 6
-                            cont_int(1) = cont_int(1) + 4
-
-                        elseif (north == 'p' .and. cell(1) == 2) then
-                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
-                            LT%lstrdb_S(cont_db(1)+1:cont_db(1)+6) = &
-                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_S(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
-                        !  ! print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
+                            
+                        elseif (north == 'p' .and. cell(1) == 2) then
+                            !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
+                            LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
+                                [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
+                        !  print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            cont_db(1) = cont_db(1) + 6
+                            cont_int(1) = cont_int(1) + 4
+                            
                         end if
                        
                         previous_node => node
@@ -4044,7 +4109,7 @@ module fisica
             end do
 
             !Caso Periódico. Só será necessário se os domínios dos processos formarem região 2x2 
-            if (wall == 'pppp') then
+            if (wall == 'pppp' .and. sum(ids(4:8)) > -4) then
                 ! Primeiro transfere para as celulas emprestadas (periodico)
                 ! O x aqui tem outra função
                 !extremidades arestas norte e sul
@@ -4275,19 +4340,27 @@ module fisica
         if (np > 1) then !se for paralelo 
             ! print*, 'L 862 >> id', id
             ! call MPI_SEND(BUF, COUNT, DATATYPE, DEST, TAG, COMM, IERROR)
-            tag = 1
+            tag = 11
             if (ids(1) >= 0) call MPI_SEND(LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 12
             if (ids(2) >= 0) call MPI_SEND(LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION, ids(2), tag,MPI_COMM_WORLD, ierr)   
+            tag = 13
             if (ids(3) >= 0) call MPI_SEND(LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION, ids(3), tag,MPI_COMM_WORLD, ierr)   
+            tag = 14
             if (ids(4) >= 0) call MPI_SEND(LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION, ids(4), tag,MPI_COMM_WORLD, ierr)   
+            tag = 15
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if 
-            tag = 2 
+            tag = 21 
             if (ids(1) >= 0) call MPI_SEND(LT%lstrint_N, cont_int(1), MPI_integer, ids(1), tag,MPI_COMM_WORLD, ierr)
+            tag = 22
             if (ids(2) >= 0) call MPI_SEND(LT%lstrint_S, cont_int(2), MPI_integer, ids(2), tag,MPI_COMM_WORLD, ierr)
+            tag = 23
             if (ids(3) >= 0) call MPI_SEND(LT%lstrint_E, cont_int(3), MPI_integer, ids(3), tag,MPI_COMM_WORLD, ierr)
+            tag = 24
             if (ids(4) >= 0) call MPI_SEND(LT%lstrint_W, cont_int(4), MPI_integer, ids(4), tag,MPI_COMM_WORLD, ierr)
+            tag = 25
             if (sum(ids(5:8)) > -4) then 
                 call MPI_SEND(LT%lstrint_D, cont_int(destD), MPI_integer, ids(destD), tag,MPI_COMM_WORLD, ierr)
             end if
@@ -4295,60 +4368,72 @@ module fisica
             cont_db = 0
             cont_int = 0
             ! print*, "L 935 TUDO ENVIADO", id
-            tag = 1
+            tag = 12
+            ! print*, "ID", id, "IDS", ids
             if (ids(1) >= 0) then  
+                ! print*, id, "> ID recebe de", ids(1)
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION , cont_db(1) , ierr )
+                ! print*, id, "ID recebe", cont_db(1), "de", ids(1)
                 call MPI_RECV (LT%lstrdb_N, cont_db(1), MPI_DOUBLE_PRECISION,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-            
+            tag = 11
             if (ids(2) >= 0) then 
+                ! print*, id, "> ID recebe de", ids(2)
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(2) , ierr )
+                ! print*, id, "ID recebe", cont_db(2), "de", ids(2)
                 call MPI_RECV (LT%lstrdb_S, cont_db(2), MPI_DOUBLE_PRECISION,ids(2), tag, MPI_COMM_WORLD, status, ierr)
-            
             end if 
+            tag = 14
             if (ids(3) >= 0) then
+                ! print*, id, "> ID recebe de", ids(3)
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(3) , ierr )
+                ! print*, id, "ID recebe", cont_db(3), "de", ids(3)
                 call MPI_RECV (LT%lstrdb_E, cont_db(3), MPI_DOUBLE_PRECISION,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
+            tag = 13
             if (ids(4) >= 0) then
+                ! print*, id, "> ID recebe de", ids(4)
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(4) , ierr )
+                ! print*, id, "ID recebe", cont_db(4), "de", ids(4)
                 call MPI_RECV (LT%lstrdb_W, cont_db(4), MPI_DOUBLE_PRECISION,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if 
-
-            tag = 2
+            ! print*, id, "db receb"
+            tag = 22
             if (ids(1) >= 0) then
                 call MPI_probe(ids(1),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(1) , ierr )
                 call MPI_RECV (LT%lstrint_N, cont_int(1), MPI_integer,ids(1), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 21
             if (ids(2) >= 0) then
                 call MPI_probe(ids(2),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(2) , ierr )
                 call MPI_RECV (LT%lstrint_S, cont_int(2), MPI_integer,ids(2), tag, MPI_COMM_WORLD, status, ierr)
             end if 
+            tag = 24
             if (ids(3) >= 0) then
                 call MPI_probe(ids(3),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(3) , ierr )
                 call MPI_RECV (LT%lstrint_E, cont_int(3), MPI_integer,ids(3), tag, MPI_COMM_WORLD, status, ierr)
             end if
+            tag = 23
             if (ids(4) >= 0) then
                 call MPI_probe(ids(4),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_integer ,  cont_int(4) , ierr )
                 call MPI_RECV (LT%lstrint_W, cont_int(4), MPI_integer,ids(4), tag, MPI_COMM_WORLD, status, ierr)
             end if
             if (sum(ids(5:8)) > -4) then
-                tag = 1
+                tag = 15
                 ! RECEBE DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
                 call MPI_RECV (LT%lstrdb_D, cont_db(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
-                tag = 2
+                tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
@@ -4784,7 +4869,7 @@ module fisica
         south = wall(2:2)
         east = wall(3:3)
         west = wall(4:4)
-        
+        ! mic(leste oeste, norte sul)
         if (domy(2) == mesh(2)+2) then 
            !! ! print*, "L 980", id
             if (north == 'e') then !elastic
@@ -5413,8 +5498,7 @@ program main
             call CFG_get(my_cfg, particle//"%pr",pr)
             if(sum(pr) > 0) gruporot = i+1
         end if
-        
-        print*, "L 5397"
+
 
         ! le o arquivo com posições
         if (dx_max < propriedade(i+1)%sigma*rcut/2) then
@@ -5553,10 +5637,10 @@ program main
     np = subx*suby
     ids = [-1,-1,-1,-1,-1,-1,-1,-1]
 
-    if (np > 2) then
+    if (np == 4) then
         L_O: do j = 0, (suby-1)
             do i = 0, (subx-1)
-                if (id == (i+j*suby)) then 
+                if (id == (i+j*suby) .or. (id == (j+i*subx) .and. subx == 1) ) then 
                     ! ids = [N,S,E,W, NE, NW, SE, SW]
                     ! Depois tentar para caso geral 
                     ! ids = [(j-1)*subx +i, (j+1)*subx +i, &
@@ -5566,34 +5650,90 @@ program main
                     ! if (j == suby-1) ids(2) = -1
                     ! if (i == subx -1) ids(3) = -1 
                     if (subx == 2) then
-                        if (id == 0) then 
-                            ids = [2, -1, 1,-1, 3, -1, -1, -1]
-                        else if (id == 1) then
-                            ids = [3, -1, -1, 0, -1, 2, -1, -1]
-                        else if (id == 2) then
-                            ids = [-1, 0, 3, -1, -1, -1, 1, -1]
+                        if (wall(1:4) == 'pppp') then
+                            if (id == 0) then 
+                                ids = [2, 2, 1, 1, 3, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [3, 3, 0, 0, -1, 2, -1, -1]
+                            else if (id == 2) then
+                                ids = [0, 0, 3, 3, -1, -1, 1, -1]
+                            else 
+                                ids = [1, 1, 2, 2, -1, -1, -1, 0]
+                            end if
+                        else if (wall(1:2) == 'pp') then
+                            if (id == 0) then 
+                                ids = [2, 2, 1,-1, 3, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [3, 3, -1, 0, -1, 2, -1, -1]
+                            else if (id == 2) then
+                                ids = [0, 0, 3, -1, -1, -1, 1, -1]
+                            else 
+                                ids = [1, 1, -1, 2, -1, -1, -1, 0]
+                            end if
+                        else if (wall(3:4) == 'pp') then
+                            if (id == 0) then 
+                                ids = [2, -1, 1, 1, 3, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [3, -1, 0, 0, -1, 2, -1, -1]
+                            else if (id == 2) then
+                                ids = [-1, 0, 3, 3, -1, -1, 1, -1]
+                            else 
+                                ids = [-1, 1, 2, 2, -1, -1, -1, 0]
+                            end if
                         else 
-                            ids = [-1, 1, -1, 2, -1, -1, -1, 0]
-                        end if
+                            if (id == 0) then 
+                                ids = [2, -1, 1,-1, 3, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [3, -1, -1, 0, -1, 2, -1, -1]
+                            else if (id == 2) then
+                                ids = [-1, 0, 3, -1, -1, -1, 1, -1]
+                            else 
+                                ids = [-1, 1, -1, 2, -1, -1, -1, 0]
+                            end if
+                        end if 
                     else if (subx == 4) then
-                        if (id == 0) then 
-                            ids = [-1, -1, 1,-1, -1, -1, -1, -1]
-                        else if (id == 1) then
-                            ids = [-1, -1, 2, 0, -1, -1, -1, -1]
-                        else if (id == 2) then
-                            ids = [-1, -1, 3, 1, -1, -1, -1, -1]
-                        else 
-                            ids = [-1, -1, -1, 2, -1, -1, -1, -1]
+                        if (wall(3:4) == 'pp') then 
+                            if (id == 0) then 
+                                ids = [-1, -1, 1, 3, -1, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [-1, -1, 2, 0, -1, -1, -1, -1]
+                            else if (id == 2) then
+                                ids = [-1, -1, 3, 1, -1, -1, -1, -1]
+                            else 
+                                ids = [-1, -1, 0, 2, -1, -1, -1, -1]
+                            end if
+                        else
+                            if (id == 0) then 
+                                ids = [-1, -1, 1,-1, -1, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [-1, -1, 2, 0, -1, -1, -1, -1]
+                            else if (id == 2) then
+                                ids = [-1, -1, 3, 1, -1, -1, -1, -1]
+                            else 
+                                ids = [-1, -1, -1, 2, -1, -1, -1, -1]
+                            end if
                         end if
                     else if (suby == 4) then
-                        if (id == 0) then 
-                            ids = [1, -1, -1, -1, -1, -1, -1, -1]
-                        else if (id == 1) then
-                            ids = [2, 0, -1, -1, -1, -1, -1, -1]
-                        else if (id == 2) then
-                            ids = [3, 1, -1, -1, -1, -1, -1, -1]
-                        else 
-                            ids = [-1, 2, -1, -1, -1, -1, -1, -1]
+                        if (wall(1:2) == 'pp') then
+                            if (id == 0) then 
+                                ids = [1, 3, -1, -1, -1, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [2, 0, -1, -1, -1, -1, -1, -1]
+                            else if (id == 2) then
+                                ids = [3, 1, -1, -1, -1, -1, -1, -1]
+                            else 
+                                ids = [0, 2, -1, -1, -1, -1, -1, -1]
+                            end if
+                        else
+                            if (id == 0) then 
+                                ids = [1, -1, -1, -1, -1, -1, -1, -1]
+                            else if (id == 1) then
+                                ids = [2, 0, -1, -1, -1, -1, -1, -1]
+                            else if (id == 2) then
+                                ids = [3, 1, -1, -1, -1, -1, -1, -1]
+                            else 
+                                ids = [-1, 2, -1, -1, -1, -1, -1, -1]
+                            end if
                         end if
                     end if 
                     domx = [int(i*(mesh(1)+2)/subx)+1, int((i+1)*(mesh(1)+2)/(subx))]
@@ -5675,9 +5815,9 @@ program main
 
     if (print_TC) then
         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
-            allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,7))
+            allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,7))
         else 
-            allocate(nRfu(N*5),nRfu_send(N*6),rFUp(N,5))
+            allocate(nRfu(N*6),nRfu_send(N*6),rFUp(N,5))
         end if
         if (id == 0) call system('mkdir temp2')
     end if
@@ -5736,7 +5876,7 @@ program main
             omega = omega*partlst
 
             ! COMP X
-            call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
+            call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np) ! altera posição
             ! print*, "L 6460", id
             ! print*, "tor", tor
             ! print*, "omega",omega
@@ -6039,7 +6179,7 @@ program main
             ! que o processo vai cuidar (subdivisões)
 
             ! COMP X
-            call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,id,np,xih,xic,cold_cells,hot_cells) ! altera posição
+            call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,cold_cells,hot_cells) ! altera posição
             !print*, "L 2002", id
             ! if (id == 0) read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
@@ -6213,14 +6353,15 @@ program main
     else
         ! TERMOSTATO SCALING OU SEM TEMOSTATO
         if (id==0) print*, "CASE: SCALING OR NO TERMOSTAT"
-        if (Td > 0) then 
-            print*, "Global temperature specified. Td = ", Td 
-        else if (Td_cold > 0) then
-            print*, "Regional temperatures specified:", Td_cold, Td_hot
-        else
-            print*, "No temperature specified!"
+        if (id == 0) then 
+            if (Td > 0) then 
+                print*, "Global temperature specified. Td = ", Td 
+            else if (Td_cold > 0) then
+                print*, "Regional temperatures specified:", Td_cold, Td_hot
+            else
+                print*, "No temperature specified!"
+            end if
         end if
-        
         do while (t_fim > t)
             ! COMPF
             ! print*, "L 6151"
@@ -6230,15 +6371,22 @@ program main
             ! que o processo vai cuidar (subdivisões)
             ! print*, "L 6155"
             ! COMP X
-            call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,id, np) ! altera posição
-
-            ! print*, "L 6160"
+            ! if (id == 0) print*, "t= ", t
+            ! print*, id, "ID a", mic 
             ! if (id == 0) read(*,*)
-            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+            call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np) ! altera posição
+            
+            call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! print*, "L 6160"
+            ! print*, id, "ID b", mic 
+            ! if (id == 0) read(*,*)
+            call MPI_barrier(MPI_COMM_WORLD, ierr)
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
-            
             ! COMP F 
+            ! print*, id, "ID d", mic
+            call MPI_barrier(MPI_COMM_WORLD, ierr)
+
             call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t) !altera força
 
             ! COMP V
@@ -6362,10 +6510,10 @@ program main
                     end if 
 
                     if ((wall(1:2) == 'pp' .or. wall(3:4) == 'pp') .and. np > 1) then
-                        ! tag = 1
                         if (id == 1) then
                             tag = 10
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 10
@@ -6378,6 +6526,7 @@ program main
                         if (id == 2) then
                             tag = 20
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if 
                         if (id == 0) then
                             tag = 20
@@ -6389,6 +6538,7 @@ program main
                         if (id == 3) then
                             tag = 30
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 30
@@ -6398,7 +6548,7 @@ program main
                         end if
                         call MPI_barrier(MPI_COMM_WORLD, ierr)
                     end if 
-
+                    ! print*, "L 6400", id
                     if (id == 0) then
                         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
                             do ii = 0, N-1
@@ -6406,14 +6556,15 @@ program main
                                     [real(mic(ii,1),kind(0.d0)),real(mic(ii,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
-                            call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
+                            call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)     
                         else 
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
-                            call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
+                            call vec2csv(rFUp,N,4,'rF_u_P',j,t,nimpre,start)
                         end if
                     end if 
+                    ! print*, "L 6416", id
                     ! deallocate(nRfu,nRfu_send,rFUp)
                 end if 
                 allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
