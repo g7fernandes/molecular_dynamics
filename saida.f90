@@ -8,7 +8,8 @@ module saida
         logical, optional :: concat0
         logical :: laux
         integer, intent(in) :: n,d
-        real(dp), intent(in) :: v(n,d), t, start
+        real(dp), allocatable, intent(in) :: v(:,:)
+        real(dp), intent(in) :: t, start !, v(n,d)
         integer :: i,step, nimpre, ic1, cpu_countrate, horas, min 
         real(dp) :: sec
         character(*) :: prop

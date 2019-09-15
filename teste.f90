@@ -13,6 +13,9 @@ program teste
     real :: a(10) 
     real, parameter :: PI = 3.1415, kb = 1.38064852E-23
     integer :: b(10)
+    integer :: c
+
+    
 
     b = [0,1,0,1,0,0,1,0,1,0]
 
@@ -22,6 +25,7 @@ program teste
     print*, "rem a por 2*pi", modulo(a,2*pi)*180/pi
 
     include "teste_include.f90"
-    
+    c = 7
+    print*, "c = ", c,  "c/2 = ", c/2
 
 end program teste
