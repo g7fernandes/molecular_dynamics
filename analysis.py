@@ -79,8 +79,10 @@ KE,tauk,tauxyp,msq,tauyxp  = np.zeros((len_list_files,div))
 
 nesb = int(input("Enter the number of assembles in which this simulation will be divided:\n"))
 periodic = ('y' == input("Where the boundaries periodic? [y/n]\n"))
+esb_len = int(len_list_files)/nesb # length of each ensamble
 mic = 0
 for step in range(len_list_files):
+    esb = step//esb_len
     if periodic:
         rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["micx","micy","RxFy","RyFx","u","m","K"])
     else:
@@ -91,87 +93,114 @@ for step in range(len_list_files):
     dmap = density_map(pos['x'],dimx,div)
 
     # Depende da região, terá um for
-    if step == 0: # se step == inicio do ensamble
+    if step%esb_len == 0: # se step == inicio do ensamble
         r0 = pos[['x','y']] # um r0 por ensamble
-        # lp = dmap # salva as partículas numa daterminada região
+        lp = dmap # salva as partículas numa daterminada região
     if periodic: 
         mic = rfup[["micx", "micy"]]*np.array([dimx, dimy])
     
     # Separar aqui por região
-    msq[step] = np.sum(np.sum(np.square(pos[['x','y']] + mic - r0),axis=1))
 
-    KE[step] = np.sum(rfup('K'))
-    tauk[step] = np.sum(vel['v_x'] * vel['v_y'] * rfup ['m'])/Vol
-    tauxyp[step] = np.sum('RxFy')/Vol
-    tauyxp[step] = np.sum('RyFx')/Vol
+    for i in range(div):
+        #mesmas particulas
+        msq[step,div] = np.mean(np.sum(np.square(pos.loc[lp[i],['x','y']] + mic.loc[lp[i]] - r0.loc[lp[i]]),axis=1))
+        # diferentes particulas
+        KE[step,div] = np.mean(rfup.loc[dmap[i],'K'])
+        tauk[step,div] = np.sum(vel.loc[dmap[i],'v_x'] * vel.loc[dmap[i],'v_y'] * rfup.loc[dmap[i],'m'])/Vol
+        tauxyp[step,div] = np.sum(rfup.loc[dmap[i],'RxFy'])/Vol
+        tauyxp[step,div] = np.sum(rfup.loc[dmap[i],'RyFx'])/Vol
     
 
-    
-# Difusividade 2D
-D = msq/(4*(len(r0)-1))
 
-kT = np.mean(KE)
+kT = KE.mean(axis=0)
 
 # Calculamos t * viscosidade*2*kT/Vol. kT = KE
 
-esb_len = int(len_list_files)/nesb # length of each ensamble
+
 etat_kk, etat_kp1, etat_pp1, etat_kp2, etat_pp2 = np.zeros(esb_len)
 
+for i in range(div):
+    for ii in range(1,esb_len): # ao longo de cada ensemble  
+        for j in range(nesb): # ao longo dos ensambles
+            start = j*esb_len
+            fin =  j*esb_len + ii
+            etat_kk[ii]  += np.trapz(tauk[start:fin,i])**2
+            etat_kp1[ii] += np.trapz(tauk[start:fin,i])*np.trapz(tauxyp[start:fin,i])
+            etat_pp1[ii] += np.trapz(tauxyp[start:fin,i])**2 
+            etat_kp2[ii] += np.trapz(tauk[start:fin,i])*np.trapz(tauyxp[start:fin,i])
+            etat_pp2[ii] += np.trapz(tauyxp[start:fin,i])**2 
 
-for i in range(1,esb_len): # ao longo de cada ensemble  
-    for j in range(nesb): # ao longo dos ensambles
-        start = j*esb_len
-        fin =  j*esb_len + i
-        etat_kk[i]  += np.trapz(tauk[start:fin])**2
-        etat_kp1[i] += np.trapz(tauk[start:fin])*np.trapz(tauxyp[start:fin])
-        etat_pp1[i] += np.trapz(tauxyp[start:fin])**2 
-        etat_kp2[i] += np.trapz(tauk[start:fin])*np.trapz(tauyxp[start:fin])
-        etat_pp2[i] += np.trapz(tauyxp[start:fin])**2 
+    # Viscosidade * t
 
-# Viscosidade * t
+    etat_kk  = (etat_kk  * Vol / (2*kT))/nesb 
+    etat_kp1 = (etat_kp1 * Vol / (kT)  )/nesb 
+    etat_pp1 = (etat_pp1 * Vol / (2*kT))/nesb
+    etat_kp2 = (etat_kp2 * Vol / (kT)  )/nesb 
+    etat_pp2 = (etat_pp2 * Vol / (2*kT))/nesb
 
-etat_kk  = (etat_kk  * Vol / (2*kT))/nesb 
-etat_kp1 = (etat_kp1 * Vol / (kT)  )/nesb 
-etat_pp1 = (etat_pp1 * Vol / (2*kT))/nesb
-etat_kp2 = (etat_kp2 * Vol / (kT)  )/nesb 
-etat_pp2 = (etat_pp2 * Vol / (2*kT))/nesb
+    # Para descobrir  fazemos um curve fit linear 
+    t = np.linspace(0,esb_len-1, esb_len)
+    eta_kk = np.polyfit(t,etat_kk,1)
+    eta_kp1 = np.polyfit(t,etat_kp1,1)
+    eta_pp1 = np.polyfit(t,etat_pp1,1)
+    eta_kp2 = np.polyfit(t,etat_kp2,1)
+    eta_pp2 = np.polyfit(t,etat_pp2,1)
 
-# Para descobir T fazemos um curve fit linear 
-t = np.linspace(0,esb_len-1, esb_len)
-eta_kk = np.polyfit(t,etat_kk,1)
-eta_kp1 = np.polyfit(t,etat_kp1,1)
-eta_pp1 = np.polyfit(t,etat_pp1,1)
-eta_kp2 = np.polyfit(t,etat_kp2,1)
-eta_pp2 = np.polyfit(t,etat_pp2,1)
+    # Calcula a Difusividade
+    D = np.polyfit(t,msq,1)
 
-# Plota as viscosidades usando taupxy
+    print("Region: {}\n".format(i))
+    fig, axs = plt.subplot(1,3)
+    # Plota a difusividade
+    axs[1,0].figure()
+    axs[1,0].scatter(t,msq[:,i])
+    axs[1,0].plot(t,t*D[0] + D[1],'k')
+    axs[1,0].title('Mean square displacement')
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    string = "D = {}".format(D[0]/4)
+    print(string + "\n")
+    axs[1,0].text(0.95,0.05,string, transform=axs[1,0].transAxes, fontsize=10, verticalalignment='bottom', bbox=props)
 
-plt.figure()
-plt.scatter(t,etat_kk,c='g',label='t*eta_kk')
-plt.scatter(t,etat_kp1,c='b',label='t*eta_kp_xy')
-plt.scatter(t,etat_pp1,c='r',label='t*eta_pp_xy')
 
-plt.plot(t, t*eta_kk[1] + etat_kk[0],'g')
-plt.plot(t, t*eta_kp1[1] + etat_kp1[0],'b')
-plt.plot(t, t*eta_pp1[1] + etat_pp1[0],'r')
+    # Plota as viscosidades usando taupxy
 
-plt.plot(t, t*(eta_kk[1] + eta_kp1[1] + eta_pp1[1] ) + etat_kk[0] + etat_kp1[0] + etat_pp1[0],'k',linewidth=2, label='t*eta')
-plt.legend()
-plt.title("Visocisdade usando tau_yx")
-# Plota as viscosidades ustando taupyx
-plt.figure()
-plt.scatter(t,etat_kk,c='g',label='t*eta_kk')
-plt.scatter(t,etat_kp2,c='b',label='t*eta_kp_yx')
-plt.scatter(t,etat_pp2,c='r',label='t*eta_pp_yx')
+    #plt.figure()
+    axs[1,1].scatter(t,etat_kk,c='g',label='t*eta_kk')
+    axs[1,1].scatter(t,etat_kp1,c='b',label='t*eta_kp_xy')
+    axs[1,1].scatter(t,etat_pp1,c='r',label='t*eta_pp_xy')
 
-plt.plot(t, t*eta_kk[1] + etat_kk[0],'g')
-plt.plot(t, t*eta_kp2[1] + etat_kp2[0],'b')
-plt.plot(t, t*eta_pp2[1] + etat_pp2[0],'r')
+    axs[1,1].plot(t, t*eta_kk[0] + etat_kk[1],'g')
+    axs[1,1].plot(t, t*eta_kp1[0] + etat_kp1[1],'b')
+    axs[1,1].plot(t, t*eta_pp1[0] + etat_pp1[1],'r')
 
-plt.plot(t, t*(eta_kk[1] + eta_kp2[1] + eta_pp2[1] ) + etat_kk[0] + etat_kp2[0] + etat_pp2[0],'k',linewidth=2, label='t*eta')
-plt.legend()
-plt.title("Visocisdade usando tau_xy")
-print("\nCom tau_xy: \neta_kk = {}\neta_kp = {}\neta_pp = {}\neta = {}\n".format(eta_kk[1],eta_kp1[1],eta_pp1[1], eta_kk[1]+eta_kp1[1]+eta_pp1[1]))
-print("\nCom tau_x]yx: \neta_kk = {}\neta_kp = {}\neta_pp = {}\neta = {}\n".format(eta_kk[1],eta_kp2[1],eta_pp2[1], eta_kk[1]+eta_kp2[1]+eta_pp2[1]))
+    axs[1,1].plot(t, t*(eta_kk[0] + eta_kp1[0] + eta_pp1[0] ) + etat_kk[1] + etat_kp1[1] + etat_pp1[1],'k',linewidth=2, label='t*eta')
+    axs[1,1].legend()
+    axs[1,1].title("Viscosity using tau_yx")
+
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    string = "etaxy = {}".format(eta_kk[0]+eta_kp1[0]+eta_pp1[0])
+    axs[1,1].text(0.95,0.05,string, transform=axs[1,1].transAxes, fontsize=10, verticalalignment='bottom', bbox=props)
+
+    # Plota as viscosidades ustando taupyx
+    #plt.figure()
+    axs[1,2].scatter(t,etat_kk,c='g',label='t*eta_kk')
+    axs[1,2].scatter(t,etat_kp2,c='b',label='t*eta_kp_yx')
+    axs[1,2].scatter(t,etat_pp2,c='r',label='t*eta_pp_yx')
+
+    axs[1,2].plot(t, t*eta_kk[0] + etat_kk[1],'g')
+    axs[1,2].plot(t, t*eta_kp2[0] + etat_kp2[1],'b')
+    axs[1,2].plot(t, t*eta_pp2[0] + etat_pp2[1],'r')
+
+    axs[1,2].plot(t, t*(eta_kk[0] + eta_kp2[0] + eta_pp2[0] ) + etat_kk[1] + etat_kp2[1] + etat_pp2[1],'k',linewidth=2, label='t*eta')
+    axs[1,2].legend()
+    axs[1,2].title("Viscosity using tau_xy.")
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    string = "etayx = {}".format(eta_kk[0]+eta_kp2[0]+eta_pp2[0])
+    axs[1,1].text(0.95,0.05,string, transform=axs[1,2].transAxes, fontsize=10, verticalalignment='bottom', bbox=props)
+
+    print("\nCom tau_xy: \neta_kk = {}\neta_kp = {}\neta_pp = {}\neta = {}\n".format(eta_kk[0],eta_kp1[0],eta_pp1[0], eta_kk[0]+eta_kp1[0]+eta_pp1[0]))
+    print("\nCom tau_x]yx: \neta_kk = {}\neta_kp = {}\neta_pp = {}\neta = {}\n".format(eta_kk[0],eta_kp2[0],eta_pp2[0], eta_kk[0]+eta_kp2[0]+eta_pp2[0]))
+
+    fig.suptitle("Region {}".format(i))
 
 plt.show()

@@ -2013,21 +2013,21 @@ module fisica
                             
                         end if
                         
-                        if (south == 'p' .and. cell(1) == mesh(2)+1) then
+                        if (south == 'p' .and. cell(1) == 2) then
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
                                 [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
                             LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
-                            ! print*, "L id",id,"transferindo para o norte",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            print '("L id ",i3," transferindo para o norte",i3,i3,i3,i3,f8.3," ",f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2), icell(mesh(2)+1) + x(2)
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
                             
-                        elseif (north == 'p' .and. cell(1) == 2) then
+                        elseif (north == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
                                 [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
-                        !  print*, "L id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            print '("L id ",i3," transferindo para o sul",i3,i3,i3,i3,f8.3," ", f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2),x(2) - icell(mesh(2)+1)
                             cont_db(1) = cont_db(1) + 6
                             cont_int(1) = cont_int(1) + 4
                             
@@ -2337,7 +2337,7 @@ module fisica
         
         ! print*, "L 854", id
         ! if (id == 0) read(*,*)
-        call MPI_barrier(MPI_COMM_WORLD, ierr)
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         ! print*, "L SOMA", (ids(1) + ids(2) + ids(3) +ids(4)), "id", id  
         ! print*, "enviando"
         if (np > 1) then !se for paralelo 
@@ -2489,7 +2489,7 @@ module fisica
                         ! !print*, 'LLLL', LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2)
                         call list_insert(malha(LT%lstrint_N(i*4+1), &
                             LT%lstrint_N(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
+                        print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
                         ! print*, "N allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                         
@@ -2507,7 +2507,7 @@ module fisica
                         ! print*, "L 865 <<<", LT%lstrint_S(i*6+1:i*6+6)
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
+                        print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
                         ! print*, "S allocado F = ",ptr%p%F
                         !! ! print*, "L 869 <<<"
                         cont_db(j) = cont_db(j) - 6
@@ -2523,7 +2523,7 @@ module fisica
                         ptr%p%n = LT%lstrint_E(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_E(i*4+1), &
                             LT%lstrint_E(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
+                        print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
                         ! print*, "E allocado", LT%lstrint_E
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -2539,7 +2539,7 @@ module fisica
                         ptr%p%n = LT%lstrint_W(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_W(i*4+1), &
                             LT%lstrint_W(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
+                        print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if  
@@ -6376,16 +6376,15 @@ program main
             ! if (id == 0) read(*,*)
             call comp_x(icell,jcell,malha,N,mesh,propriedade, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np) ! altera posição
             
-            call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             ! print*, "L 6160"
-            ! print*, id, "ID b", mic 
-            ! if (id == 0) read(*,*)
+            if (id == 0) read(*,*)
             call MPI_barrier(MPI_COMM_WORLD, ierr)
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             ! COMP F 
             ! print*, id, "ID d", mic
-            call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
 
             call comp_F(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t) !altera força
 
@@ -6579,7 +6578,7 @@ program main
 
     end if
 
-    call clean_mesh(malha, mesh, domx, domy,id,.true.)
+    ! call clean_mesh(malha, mesh, domx, domy,id,.true.)
     deallocate(LT%lstrdb_N, LT%lstrdb_S, LT%lstrdb_E, LT%lstrdb_W, LT%lstrdb_D, &
             LT%lstrint_N, LT%lstrint_S, LT%lstrint_E, LT%lstrint_W, LT%lstrint_D)
     ! print*, 'L 3104'
