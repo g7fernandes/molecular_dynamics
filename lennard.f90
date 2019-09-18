@@ -1997,7 +1997,7 @@ module fisica
                                 ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             ! 4 elementos
                             LT%lstrint_E(cont_int(3)+1:cont_int(3)+4) = [cell(1),1,ptr%p%n,ptr%p%grupo]
-                            ! print*, "L id",id,"transferindo para o oeste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print '("L id ",i3," transferindo para o oeste",i3,i3,i3,i3,f8.3," ",f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2), x(1)- jcell(mesh(1)+1)
                             cont_db(3) = cont_db(3) + 6
                             cont_int(3) = cont_int(3) + 4
                             
@@ -2007,7 +2007,7 @@ module fisica
                             LT%lstrdb_W(cont_db(4)+1:cont_db(4)+6) = &
                                 [x(1)+ jcell(mesh(1)+1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                             LT%lstrint_W(cont_int(4)+1:cont_int(4)+4) = [cell(1),mesh(1)+2,ptr%p%n,ptr%p%grupo]
-                            ! print*, "L id",id,"transferindo para o leste",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print '("L id ",i3," transferindo para o leste",i3,i3,i3,i3,f8.3," ",f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2), x(1)+ jcell(mesh(1)+1)
                             cont_db(4) = cont_db(4) + 6
                             cont_int(4) = cont_int(4) + 4
                             
@@ -2017,17 +2017,18 @@ module fisica
                             !!! ! print*, "L 567",  cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_S(cont_db(2)+1:cont_db(2)+6) = &
                                 [x(1),icell(mesh(2)+1) + x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]                
-                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
-                            print '("L id ",i3," transferindo para o norte",i3,i3,i3,i3,f8.3," ",f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2), icell(mesh(2)+1) + x(2)
+                            LT%lstrint_S(cont_int(2)+1:cont_int(2)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print '("L id ",i3," transferindo para o norte",i3,i3,i3,i3,f8.3," ",f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2), icell(mesh(2)+1) + x(2)
                             cont_db(2) = cont_db(2) + 6
                             cont_int(2) = cont_int(2) + 4
+
                             
                         elseif (north == 'p' .and. cell(1) == mesh(2)+1) then
                             !!! ! print*, "L 580", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                             LT%lstrdb_N(cont_db(1)+1:cont_db(1)+6) = &
                                 [x(1),x(2) - icell(mesh(2)+1), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
-                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [mesh(2)+2,cell(2),ptr%p%n,ptr%p%grupo]
-                            print '("L id ",i3," transferindo para o sul",i3,i3,i3,i3,f8.3," ", f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2),x(2) - icell(mesh(2)+1)
+                            LT%lstrint_N(cont_int(1)+1:cont_int(1)+4) = [1,cell(2),ptr%p%n,ptr%p%grupo]
+                            ! print '("L id ",i3," transferindo para o sul",i3,i3,i3,i3,f8.3," ", f8.3," ",f8.3)', id,cell(1),cell(2),ptr%p%n,ptr%p%grupo,x(1),x(2),x(2) - icell(mesh(2)+1)
                             cont_db(1) = cont_db(1) + 6
                             cont_int(1) = cont_int(1) + 4
                             
@@ -2104,6 +2105,7 @@ module fisica
                 ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                 LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1),x(2), ptr%p%v(1),ptr%p%v(2), ptr%p%F(1),ptr%p%F(2)]
                 LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                
                 ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
                 cont_db(destD) = cont_db(destD) + 6
                 cont_int(destD) = cont_int(destD) + 4 
@@ -2140,7 +2142,8 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                     ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2145 id",i,j, "ID:",id,"transferindo diagonal", cell(1),cell(2),ptr%p%n, x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2152,7 +2155,7 @@ module fisica
                 if (domy(2) /= mesh(2)+2) i = domy(2)
                 if (domx(1) == 1) then 
                     j = 2
-                    x = [jcell(mesh(1)+2), 0.0_dp]
+                    x = [jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, mesh(1) + 2]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
@@ -2168,12 +2171,13 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2178 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2184,7 +2188,7 @@ module fisica
                 if (domy(1) == 1) then
                     i = domy(1) +1
                     cell(1) = mesh(2) + 2
-                    x(2)  =  icell(mesh(2)+1)
+                    x(2)  =  + icell(mesh(2)+1)
                 end if
                 if (domy(2) == mesh(2)+2) then
                     i = domy(2) - 1
@@ -2199,7 +2203,7 @@ module fisica
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)-1
                     cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    x(1) = - jcell(mesh(1)+1)
                 end if
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
@@ -2208,13 +2212,14 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, id, "ID", i, j
+                    ! print*, "L  2219 id",id,"transferindo diagonal",  cell(1),cell(2)
+                    ! print*, "L  2219 id",id,"X", ptr%p%x(1),ptr%p%x(2), "X,dep",  x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2246,12 +2251,12 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2256 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2278,13 +2283,13 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2294,23 +2299,23 @@ module fisica
                 !extremidades nas pontas
                 if (domy(1) == 1) then
                     i = domy(1)
-                    cell(1) = mesh(2) + 2
+                    cell(1) = mesh(2) + 1
                     x(2)  =  icell(mesh(2)+1)
                 end if 
                 if (domy(2) == mesh(2)+2) then
                     i = domy(2)
-                    cell(1) = 1
+                    cell(1) = 2
                     x(2)  =  - icell(mesh(2)+1)
                 end if
                 if (domx(1) == 1) then 
                     j = domx(1)
-                    cell(2) = mesh(1) + 2
+                    cell(2) = mesh(1) + 1
                     x(1) = jcell(mesh(1)+1)
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)
-                    cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    cell(2) = 2
+                    x(1) = - jcell(mesh(1)+1)
                 end if
             
                 previous_node => malha(i,j)%list
@@ -2319,13 +2324,14 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -2431,7 +2437,7 @@ module fisica
             end if
             if (sum(ids(5:8)) > -4) then
                 tag = 15
-                ! RECEBE DA DIAGONAL (suporte para 4 processos)
+                ! RECEBE DB DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
@@ -2439,9 +2445,10 @@ module fisica
                 tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
-                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
-                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(destD) , ierr )
+                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_integer,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
 
+                ! print*, id, "RCV ID", LT%lstrint_D
                 ! DIAGONAL, tem que alterar para o caso com >4 processos
                 j = destD
                 do i = 0, cont_db(j)/6
@@ -2458,7 +2465,6 @@ module fisica
                         ptr%p%n = LT%lstrint_D(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_D(i*4+1), &
                             LT%lstrint_D(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "D allocado em", LT%lstrint_D(i*4+1), LT%lstrint_D(i*4+2), "id =", id, "posição",ptr%p%x
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -2489,7 +2495,7 @@ module fisica
                         ! !print*, 'LLLL', LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2)
                         call list_insert(malha(LT%lstrint_N(i*4+1), &
                             LT%lstrint_N(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2),ptr%p%x, "id =", id
                         ! print*, "N allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                         
@@ -2507,7 +2513,7 @@ module fisica
                         ! print*, "L 865 <<<", LT%lstrint_S(i*6+1:i*6+6)
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), ptr%p%x, "id =", id
                         ! print*, "S allocado F = ",ptr%p%F
                         !! ! print*, "L 869 <<<"
                         cont_db(j) = cont_db(j) - 6
@@ -2523,7 +2529,7 @@ module fisica
                         ptr%p%n = LT%lstrint_E(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_E(i*4+1), &
                             LT%lstrint_E(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
+                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), ptr%p%x, "x=",ptr%p%x
                         ! print*, "E allocado", LT%lstrint_E
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -2539,7 +2545,7 @@ module fisica
                         ptr%p%n = LT%lstrint_W(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_W(i*4+1), &
                             LT%lstrint_W(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2),ptr%p%x,  "id =", id
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if  
@@ -3119,7 +3125,7 @@ module fisica
             end do
 
             !Caso Periódico. Só será necessário se os domínios dos processos formarem região 2x2 
-            if (wall == 'pppp') then
+            if (wall == 'pppp' .and. sum(ids(4:8)) > -4) then
                 ! Primeiro transfere para as celulas emprestadas (periodico)
                 ! O x aqui tem outra função
                 !extremidades arestas norte e sul
@@ -3147,7 +3153,8 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                     ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2145 id",i,j, "ID:",id,"transferindo diagonal", cell(1),cell(2),ptr%p%n, x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3159,7 +3166,7 @@ module fisica
                 if (domy(2) /= mesh(2)+2) i = domy(2)
                 if (domx(1) == 1) then 
                     j = 2
-                    x = [jcell(mesh(1)+2), 0.0_dp]
+                    x = [jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, mesh(1) + 2]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
@@ -3175,12 +3182,13 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2178 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3191,7 +3199,7 @@ module fisica
                 if (domy(1) == 1) then
                     i = domy(1) +1
                     cell(1) = mesh(2) + 2
-                    x(2)  =  icell(mesh(2)+1)
+                    x(2)  =  + icell(mesh(2)+1)
                 end if
                 if (domy(2) == mesh(2)+2) then
                     i = domy(2) - 1
@@ -3206,7 +3214,7 @@ module fisica
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)-1
                     cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    x(1) = - jcell(mesh(1)+1)
                 end if
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
@@ -3215,13 +3223,14 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, id, "ID", i, j
+                    ! print*, "L  2219 id",id,"transferindo diagonal",  cell(1),cell(2)
+                    ! print*, "L  2219 id",id,"X", ptr%p%x(1),ptr%p%x(2), "X,dep",  x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3253,12 +3262,12 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2256 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3285,13 +3294,13 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3301,23 +3310,23 @@ module fisica
                 !extremidades nas pontas
                 if (domy(1) == 1) then
                     i = domy(1)
-                    cell(1) = mesh(2) + 2
+                    cell(1) = mesh(2) + 1
                     x(2)  =  icell(mesh(2)+1)
                 end if 
-                if (domy(2) == mesh(2)+2) then 
+                if (domy(2) == mesh(2)+2) then
                     i = domy(2)
-                    cell(1) = 1
+                    cell(1) = 2
                     x(2)  =  - icell(mesh(2)+1)
                 end if
                 if (domx(1) == 1) then 
                     j = domx(1)
-                    cell(2) = mesh(1) + 2
+                    cell(2) = mesh(1) + 1
                     x(1) = jcell(mesh(1)+1)
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)
-                    cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    cell(2) = 2
+                    x(1) = - jcell(mesh(1)+1)
                 end if
             
                 previous_node => malha(i,j)%list
@@ -3326,13 +3335,14 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -3340,7 +3350,7 @@ module fisica
                 end do
             end if
             ! Fim da transfência para diagonal
-        end if 
+        end if
         
         ! print*, "L 854", id
         ! if (id == 0) read(*,*)
@@ -3438,7 +3448,7 @@ module fisica
             end if
             if (sum(ids(5:8)) > -4) then
                 tag = 15
-                ! RECEBE DA DIAGONAL (suporte para 4 processos)
+                ! RECEBE DB DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
@@ -3446,9 +3456,10 @@ module fisica
                 tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
-                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
-                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(destD) , ierr )
+                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_integer,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
 
+                ! print*, id, "RCV ID", LT%lstrint_D
                 ! DIAGONAL, tem que alterar para o caso com >4 processos
                 j = destD
                 do i = 0, cont_db(j)/6
@@ -3465,7 +3476,6 @@ module fisica
                         ptr%p%n = LT%lstrint_D(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_D(i*4+1), &
                             LT%lstrint_D(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "D allocado em", LT%lstrint_D(i*4+1), LT%lstrint_D(i*4+2), "id =", id, "posição",ptr%p%x
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -3477,7 +3487,7 @@ module fisica
             ! if (id == 0)  read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             ! print*, "Tudo recebido", id
-            !  call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             !  print*, 'ID APOS BARREIRA', id
             ! print*, "L 1033"
             do j = 1,4
@@ -3496,7 +3506,7 @@ module fisica
                         ! !print*, 'LLLL', LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2)
                         call list_insert(malha(LT%lstrint_N(i*4+1), &
                             LT%lstrint_N(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2),ptr%p%x, "id =", id
                         ! print*, "N allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                         
@@ -3514,7 +3524,7 @@ module fisica
                         ! print*, "L 865 <<<", LT%lstrint_S(i*6+1:i*6+6)
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), ptr%p%x, "id =", id
                         ! print*, "S allocado F = ",ptr%p%F
                         !! ! print*, "L 869 <<<"
                         cont_db(j) = cont_db(j) - 6
@@ -3530,7 +3540,7 @@ module fisica
                         ptr%p%n = LT%lstrint_E(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_E(i*4+1), &
                             LT%lstrint_E(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
+                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), ptr%p%x, "x=",ptr%p%x
                         ! print*, "E allocado", LT%lstrint_E
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -3546,7 +3556,7 @@ module fisica
                         ptr%p%n = LT%lstrint_W(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_W(i*4+1), &
                             LT%lstrint_W(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2),ptr%p%x,  "id =", id
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if  
@@ -4137,7 +4147,8 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                     ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2145 id",i,j, "ID:",id,"transferindo diagonal", cell(1),cell(2),ptr%p%n, x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4149,7 +4160,7 @@ module fisica
                 if (domy(2) /= mesh(2)+2) i = domy(2)
                 if (domx(1) == 1) then 
                     j = 2
-                    x = [jcell(mesh(1)+2), 0.0_dp]
+                    x = [jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, mesh(1) + 2]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
@@ -4165,12 +4176,13 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2178 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+                    ! print*, "ID", id, "MANDA:", LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4181,7 +4193,7 @@ module fisica
                 if (domy(1) == 1) then
                     i = domy(1) +1
                     cell(1) = mesh(2) + 2
-                    x(2)  =  icell(mesh(2)+1)
+                    x(2)  =  + icell(mesh(2)+1)
                 end if
                 if (domy(2) == mesh(2)+2) then
                     i = domy(2) - 1
@@ -4196,7 +4208,7 @@ module fisica
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)-1
                     cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    x(1) = - jcell(mesh(1)+1)
                 end if
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
@@ -4205,13 +4217,14 @@ module fisica
                 ! if (associated(node))  print*, "transferencia diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, id, "ID", i, j
+                    ! print*, "L  2219 id",id,"transferindo diagonal",  cell(1),cell(2)
+                    ! print*, "L  2219 id",id,"X", ptr%p%x(1),ptr%p%x(2), "X,dep",  x(1)+ptr%p%x(1),x(2)+ptr%p%x(2)
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4243,12 +4256,12 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                          ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2256 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4275,13 +4288,13 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4291,23 +4304,23 @@ module fisica
                 !extremidades nas pontas
                 if (domy(1) == 1) then
                     i = domy(1)
-                    cell(1) = mesh(2) + 2
+                    cell(1) = mesh(2) + 1
                     x(2)  =  icell(mesh(2)+1)
                 end if 
                 if (domy(2) == mesh(2)+2) then
                     i = domy(2)
-                    cell(1) = 1
+                    cell(1) = 2
                     x(2)  =  - icell(mesh(2)+1)
                 end if
                 if (domx(1) == 1) then 
                     j = domx(1)
-                    cell(2) = mesh(1) + 2
+                    cell(2) = mesh(1) + 1
                     x(1) = jcell(mesh(1)+1)
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2)
-                    cell(2) = 1
-                    x(1) = - jcell(mesh(1)+2)
+                    cell(2) = 2
+                    x(1) = - jcell(mesh(1)+1)
                 end if
             
                 previous_node => malha(i,j)%list
@@ -4316,13 +4329,14 @@ module fisica
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
                     ptr = transfer(list_get(node), ptr)
-                    x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
-                    cell = [i, j]
+                    ! x = ptr%p%x ! não sei pq essas linhas não estavam aqui antes. Atentar
+                    ! cell = [i, j]
                     ! ! print*, "L 806", cell(1), cell(2), domy(1), domy(2), "part", ptr%p%n
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L id",id,"mudando diagonal",  [cell(1),cell(2),ptr%p%n], "p/ id", ids(destD)
+                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
+
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
@@ -4428,7 +4442,7 @@ module fisica
             end if
             if (sum(ids(5:8)) > -4) then
                 tag = 15
-                ! RECEBE DA DIAGONAL (suporte para 4 processos)
+                ! RECEBE DB DA DIAGONAL (suporte para 4 processos)
                 ! call MPI_probe(,tag, MPI_COMM_WORLD, status, ierr)
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
                 CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_db(destD) , ierr )
@@ -4436,9 +4450,10 @@ module fisica
                 tag = 25
                 ! Recebe INT da DIAGONAL. Aqui está com suporte para 4 processadores
                 call MPI_probe(ids(destD),tag, MPI_COMM_WORLD, status, ierr)
-                CALL MPI_Get_count ( status , MPI_DOUBLE_PRECISION ,  cont_int(destD) , ierr )
-                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_DOUBLE_PRECISION,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
+                CALL MPI_Get_count ( status , MPI_integer ,  cont_int(destD) , ierr )
+                call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_integer,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
 
+                ! print*, id, "RCV ID", LT%lstrint_D
                 ! DIAGONAL, tem que alterar para o caso com >4 processos
                 j = destD
                 do i = 0, cont_db(j)/6
@@ -4455,7 +4470,6 @@ module fisica
                         ptr%p%n = LT%lstrint_D(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_D(i*4+1), &
                             LT%lstrint_D(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "D allocado em", LT%lstrint_D(i*4+1), LT%lstrint_D(i*4+2), "id =", id, "posição",ptr%p%x
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -4467,7 +4481,7 @@ module fisica
             ! if (id == 0)  read(*,*)
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             ! print*, "Tudo recebido", id
-            !  call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             !  print*, 'ID APOS BARREIRA', id
             ! print*, "L 1033"
             do j = 1,4
@@ -4486,7 +4500,7 @@ module fisica
                         ! !print*, 'LLLL', LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2)
                         call list_insert(malha(LT%lstrint_N(i*4+1), &
                             LT%lstrint_N(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "N allocado em", LT%lstrint_N(i*4+1), LT%lstrint_N(i*4+2),ptr%p%x, "id =", id
                         ! print*, "N allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                         
@@ -4504,7 +4518,7 @@ module fisica
                         ! print*, "L 865 <<<", LT%lstrint_S(i*6+1:i*6+6)
                         call list_insert(malha(LT%lstrint_S(i*4+1), &
                             LT%lstrint_S(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "S allocado em", LT%lstrint_S(i*4+1), LT%lstrint_S(i*4+2), ptr%p%x, "id =", id
                         ! print*, "S allocado F = ",ptr%p%F
                         !! ! print*, "L 869 <<<"
                         cont_db(j) = cont_db(j) - 6
@@ -4520,7 +4534,7 @@ module fisica
                         ptr%p%n = LT%lstrint_E(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_E(i*4+1), &
                             LT%lstrint_E(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), "x=",ptr%p%x
+                        ! print*, ptr%p%n, "E allocado em", LT%lstrint_E(i*4+1), LT%lstrint_E(i*4+2), ptr%p%x, "x=",ptr%p%x
                         ! print*, "E allocado", LT%lstrint_E
                         cont_db(j) = cont_db(j) - 6
                     end if
@@ -4536,7 +4550,7 @@ module fisica
                         ptr%p%n = LT%lstrint_W(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_W(i*4+1), &
                             LT%lstrint_W(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2), "id =", id
+                        ! print*, ptr%p%n, "W allocado em", LT%lstrint_W(i*4+1), LT%lstrint_W(i*4+2),ptr%p%x,  "id =", id
                         ! print*, "W allocado F = ",ptr%p%F
                         cont_db(j) = cont_db(j) - 6
                     end if  
@@ -6378,8 +6392,8 @@ program main
             
             ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             ! print*, "L 6160"
-            if (id == 0) read(*,*)
-            call MPI_barrier(MPI_COMM_WORLD, ierr)
+            ! if (id == 0) read(*,*)
+            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
             ! COMP F 
