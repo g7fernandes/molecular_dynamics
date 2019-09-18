@@ -476,7 +476,7 @@ module fisica
                 end do
             end do
         end do
-        aux1 = aux1 - 1
+        
         ! print*, "ID, AUX1", id, aux1
         ! print*, "FIM"
     end subroutine comp_pot    
@@ -1921,7 +1921,7 @@ module fisica
 
                                 cont_db(1) = cont_db(1) + 6
                                 cont_int(1) = cont_int(1) + 4
-                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) - 1
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) + 1
                             end if 
                             if (south == 'p' .and. cell(1) == 1  .and. (ids(1) + ids(2)) /= -2) then
                                 ! print*, "L 580", cell(1), cell(2), "part", ptr%p%n, "i,j", i, j
@@ -1931,7 +1931,7 @@ module fisica
                                 ! print*, "> id",id,"transferindo para o sul",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                                 cont_db(2) = cont_db(2) + 6
                                 cont_int(2) = cont_int(2) + 4
-                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) + 1
+                                mic(ptr%p%n, 2) = mic(ptr%p%n, 2) - 1
                             end if                        
                         end if
                         !!! FIM DA VERIFICAÇÃO SE MUDOU DE DOMÍNIO !!!
@@ -6144,7 +6144,7 @@ program main
                         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = &
-                                    [real(mic(ii,1),kind(0.d0)),real(mic(ii,2),kind(0.d0)),nRfu(ii*6+2), & 
+                                    [real(mic(ii+1,1),kind(0.d0)),real(mic(ii+1,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
                             call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
@@ -6342,7 +6342,7 @@ program main
                         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = &
-                                    [real(mic(ii,1),kind(0.d0)),real(mic(ii,2),kind(0.d0)),nRfu(ii*6+2), & 
+                                    [real(mic(ii+1,1),kind(0.d0)),real(mic(ii+1,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
                             call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
@@ -6567,7 +6567,7 @@ program main
                         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = &
-                                    [real(mic(ii,1),kind(0.d0)),real(mic(ii,2),kind(0.d0)),nRfu(ii*6+2), & 
+                                    [real(mic(ii+1,1),kind(0.d0)),real(mic(ii+1,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
                             call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)     

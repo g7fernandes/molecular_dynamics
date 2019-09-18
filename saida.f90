@@ -17,8 +17,8 @@ module saida
         real(dp) :: time
         real(dp), save :: timep, etc, dtimepp
         character(LEN=*),parameter :: fmt5 = '(f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
-        character(LEN=*),parameter :: fmt6 = '(f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
-        character(LEN=*),parameter :: fmt7 = '(f5.0, ", ",f5.0, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
+        character(LEN=*),parameter :: fmt6 = '(i10, ", ",i10, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
+        character(LEN=*),parameter :: fmt7 = '(i10, ", ",i10, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
 
         laux = .false.
         if (present(concat0)) laux = concat0
@@ -52,7 +52,7 @@ module saida
                 end do          
             else if (d == 6) then 
                 do i = 1,n
-                    write(10,fmt6) v(i,1),v(i,2),v(i,3),v(i,4),v(i,5),v(i,6)
+                    write(10,fmt6) int(v(i,1)),int(v(i,2)),v(i,3),v(i,4),v(i,5),v(i,6)
                 end do          
             else if (d == 7) then 
                 do i = 1,n

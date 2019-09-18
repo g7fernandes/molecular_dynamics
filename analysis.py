@@ -39,11 +39,11 @@ def density_map(x, dimx ,div):
     #        dimx: dimension of the region in the diraction of the divison
     #        div: number of divisions
     # outut: y: list of arrays that contains the indices of the particles that are in a region that is the position in the array
-    div = dimx/div
+    div = int(dimx/div)
     xp = x // div # This gives the location of each particle
     dmap = [[] for _ in range(div)]
     for i in range(len(x)):
-        dmap[xp].append(i)
+        dmap[int(xp[i])].append(i)
     return dmap
 
 # Find the directory where the files are
@@ -75,13 +75,20 @@ if div == '':
 else:
     div = int(div)
 
-KE,tauk,tauxyp,msq,tauyxp  = np.zeros((len_list_files,div))
+KE  = np.zeros((len_list_files,div))
+tauk  = np.zeros((len_list_files,div))
+tauxyp  = np.zeros((len_list_files,div))
+msq  = np.zeros((len_list_files,div))
+tauyxp  = np.zeros((len_list_files,div))
 
 nesb = int(input("Enter the number of assembles in which this simulation will be divided:\n"))
 periodic = ('y' == input("Where the boundaries periodic? [y/n]\n"))
-esb_len = int(len_list_files)/nesb # length of each ensamble
+esb_len = int(len_list_files/nesb) # length of each ensamble
 mic = 0
-for step in range(len_list_files):
+print("Reading files...")
+if pbar:
+    bar = progressbar.ProgressBar(max_value=(len_list_files))
+for step in range(1,len_list_files):
     esb = step//esb_len
     if periodic:
         rfup = pd.read_csv(zip_rfup.open('rF_u_P.csv.'+str(step)), header=None, names = ["micx","micy","RxFy","RyFx","u","m","K"])
@@ -93,24 +100,25 @@ for step in range(len_list_files):
     dmap = density_map(pos['x'],dimx,div)
 
     # Depende da região, terá um for
-    if step%esb_len == 0: # se step == inicio do ensamble
+    if step%esb_len == 1: # se step == inicio do ensamble
         r0 = pos[['x','y']] # um r0 por ensamble
         lp = dmap # salva as partículas numa daterminada região
-    if periodic: 
-        mic = rfup[["micx", "micy"]]*np.array([dimx, dimy])
+    # if periodic: 
+    #     mic = rfup[["micx", "micy"]].to_numpy()*np.array([dimx, dimy])
     
     # Separar aqui por região
 
     for i in range(div):
         #mesmas particulas
-        msq[step,div] = np.mean(np.sum(np.square(pos.loc[lp[i],['x','y']] + mic.loc[lp[i]] - r0.loc[lp[i]]),axis=1))
+        # msq[step,i] = np.mean(np.sum(np.square(pos.loc[lp[i],['x','y']] + mic.loc[lp[i]] - r0.loc[lp[i]]),axis=1))
         # diferentes particulas
-        KE[step,div] = np.mean(rfup.loc[dmap[i],'K'])
-        tauk[step,div] = np.sum(vel.loc[dmap[i],'v_x'] * vel.loc[dmap[i],'v_y'] * rfup.loc[dmap[i],'m'])/Vol
-        tauxyp[step,div] = np.sum(rfup.loc[dmap[i],'RxFy'])/Vol
-        tauyxp[step,div] = np.sum(rfup.loc[dmap[i],'RyFx'])/Vol
-    
+        KE[step,i] = np.mean(rfup.loc[dmap[i],'K'])
+        tauk[step,i] = np.sum(vel.loc[dmap[i],'v_x'] * vel.loc[dmap[i],'v_y'] * rfup.loc[dmap[i],'m'])/Vol
+        tauxyp[step,i] = np.sum(rfup.loc[dmap[i],'RxFy'])/Vol
+        tauyxp[step,i] = np.sum(rfup.loc[dmap[i],'RyFx'])/Vol
 
+    if pbar: #atualiza a barra de progresso 
+        bar.update(step)
 
 kT = KE.mean(axis=0)
 
@@ -146,20 +154,20 @@ for i in range(div):
     eta_kp2 = np.polyfit(t,etat_kp2,1)
     eta_pp2 = np.polyfit(t,etat_pp2,1)
 
-    # Calcula a Difusividade
-    D = np.polyfit(t,msq,1)
+    # # Calcula a Difusividade
+    # D = np.polyfit(t,msq,1)
 
-    print("Region: {}\n".format(i))
-    fig, axs = plt.subplot(1,3)
-    # Plota a difusividade
-    axs[1,0].figure()
-    axs[1,0].scatter(t,msq[:,i])
-    axs[1,0].plot(t,t*D[0] + D[1],'k')
-    axs[1,0].title('Mean square displacement')
-    props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-    string = "D = {}".format(D[0]/4)
-    print(string + "\n")
-    axs[1,0].text(0.95,0.05,string, transform=axs[1,0].transAxes, fontsize=10, verticalalignment='bottom', bbox=props)
+    # print("Region: {}\n".format(i))
+    # fig, axs = plt.subplot(1,3)
+    # # Plota a difusividade
+    # axs[1,0].figure()
+    # axs[1,0].scatter(t,msq[:,i])
+    # axs[1,0].plot(t,t*D[0] + D[1],'k')
+    # axs[1,0].title('Mean square displacement')
+    # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+    # string = "D = {}".format(D[0]/4)
+    # print(string + "\n")
+    # axs[1,0].text(0.95,0.05,string, transform=axs[1,0].transAxes, fontsize=10, verticalalignment='bottom', bbox=props)
 
 
     # Plota as viscosidades usando taupxy
