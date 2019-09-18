@@ -1942,7 +1942,6 @@ module fisica
                         ! sentir a presença da partícula que ela perdeu mas ficou ao lado 
                         ! print*, "mudou2"
                         ! if (id == 0) read(*,*)
-
                         call list_change(previous_node,malha(cell(1),cell(2))%list)
                         node => list_next(previous_node)
  
@@ -2036,7 +2035,6 @@ module fisica
                        
                         previous_node => node
                         node => list_next(node)
-                        ! print*, "L740 FORÇA", ptr%p%F, id
                     end if
 
                     if (associated(node)) then 
@@ -2049,10 +2047,9 @@ module fisica
             end do
         end do
         
+
         ! transferir os termos que estão no encontro de 4 processos 
         ! print*, "L 794", id
-        ! if (id == 0) read(*,*) 
-        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
         if (np > 1 .and. sum(ids(5:8)) > -4) then
             do i = 5,8
                 !identifica qual o processo na diagonal
@@ -2232,17 +2229,17 @@ module fisica
                 ! norte e sul
  
                 if (domy(1) == 1) then
-                    i = domy(1)
+                    i = domy(1) 
                     x = [0.0_dp, icell(mesh(2)+1)]
                     cell = [mesh(2)+1, 1]
                 end if
                 if (domy(2) == mesh(2)+2) then     
                     i = domy(2)
                     x = [0.0_dp, -icell(mesh(2)+1)]
-                    cell = [1, 0]
+                    cell = [2, 1]
                 end if
-                if (domx(1) /= 1) j = domx(1)   
-                if (domx(2) /= mesh(1) + 2) j = domx(2)  
+                if (domx(1) /= 1) j = domx(1) + 1  
+                if (domx(2) /= mesh(1) + 2) j = domx(2) - 1 
                 cell(2) = j  
             
                 previous_node => malha(i,j)%list
@@ -2264,21 +2261,23 @@ module fisica
                 end do
 
                 !extremidades leste oeste
-                if (domy(1) /= 1) i = domy(1)
-                if (domy(2) /= mesh(2)+2) i = domy(2)
+
+                if (domy(1) /= 1) i = domy(1)-1
+                if (domy(2) /= mesh(2)+2) i = domy(2)+1
                 if (domx(1) == 1) then 
                     j = 1
                     x = [jcell(mesh(1)+1), 0.0_dp]
-                    cell = [i, mesh(1) + 2]
+                    cell = [i, mesh(1) + 1]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2) 
                     x = [-jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, 2]
                 end if
-            
+
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
+           
                 ! if (associated(node)) ptr = transfer(list_get(node), ptr)
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
@@ -2289,11 +2288,11 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
                     node => list_next(node)
+                    read(*,*)
                 end do
 
                 !extremidades nas pontas
@@ -2330,7 +2329,6 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
@@ -2449,6 +2447,7 @@ module fisica
                 call MPI_RECV (LT%lstrint_D, cont_int(destD), MPI_integer,ids(destD), tag, MPI_COMM_WORLD, status, ierr)
 
                 ! print*, id, "RCV ID", LT%lstrint_D
+                ! print*, id, "RCV ID", LT%lstrdb_D
                 ! DIAGONAL, tem que alterar para o caso com >4 processos
                 j = destD
                 do i = 0, cont_db(j)/6
@@ -2465,7 +2464,7 @@ module fisica
                         ptr%p%n = LT%lstrint_D(i*4+3) !identidade da partícula importante para imprimir
                         call list_insert(malha(LT%lstrint_D(i*4+1), &
                             LT%lstrint_D(i*4+2))%list, data=transfer(ptr, list_data)) 
-                        ! print*, "W allocado F = ",ptr%p%F
+                        ! print*, ptr%p%n, "D allocado em", LT%lstrint_D(i*4+1), LT%lstrint_D(i*4+2),ptr%p%x, "id =", id
                         cont_db(j) = cont_db(j) - 6
                     end if
                 end do
@@ -3243,17 +3242,17 @@ module fisica
                 ! norte e sul
  
                 if (domy(1) == 1) then
-                    i = domy(1)
+                    i = domy(1) 
                     x = [0.0_dp, icell(mesh(2)+1)]
                     cell = [mesh(2)+1, 1]
                 end if
                 if (domy(2) == mesh(2)+2) then     
                     i = domy(2)
                     x = [0.0_dp, -icell(mesh(2)+1)]
-                    cell = [1, 0]
+                    cell = [2, 1]
                 end if
-                if (domx(1) /= 1) j = domx(1)   
-                if (domx(2) /= mesh(1) + 2) j = domx(2)  
+                if (domx(1) /= 1) j = domx(1) + 1  
+                if (domx(2) /= mesh(1) + 2) j = domx(2) - 1 
                 cell(2) = j  
             
                 previous_node => malha(i,j)%list
@@ -3275,21 +3274,23 @@ module fisica
                 end do
 
                 !extremidades leste oeste
-                if (domy(1) /= 1) i = domy(1)
-                if (domy(2) /= mesh(2)+2) i = domy(2)
+
+                if (domy(1) /= 1) i = domy(1)-1
+                if (domy(2) /= mesh(2)+2) i = domy(2)+1
                 if (domx(1) == 1) then 
                     j = 1
                     x = [jcell(mesh(1)+1), 0.0_dp]
-                    cell = [i, mesh(1) + 2]
+                    cell = [i, mesh(1) + 1]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2) 
                     x = [-jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, 2]
                 end if
-            
+
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
+           
                 ! if (associated(node)) ptr = transfer(list_get(node), ptr)
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
@@ -3300,11 +3301,11 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
                     node => list_next(node)
+                    read(*,*)
                 end do
 
                 !extremidades nas pontas
@@ -3341,7 +3342,6 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
@@ -4237,17 +4237,17 @@ module fisica
                 ! norte e sul
  
                 if (domy(1) == 1) then
-                    i = domy(1)
+                    i = domy(1) 
                     x = [0.0_dp, icell(mesh(2)+1)]
                     cell = [mesh(2)+1, 1]
                 end if
                 if (domy(2) == mesh(2)+2) then     
                     i = domy(2)
                     x = [0.0_dp, -icell(mesh(2)+1)]
-                    cell = [1, 0]
+                    cell = [2, 1]
                 end if
-                if (domx(1) /= 1) j = domx(1)   
-                if (domx(2) /= mesh(1) + 2) j = domx(2)  
+                if (domx(1) /= 1) j = domx(1) + 1  
+                if (domx(2) /= mesh(1) + 2) j = domx(2) - 1 
                 cell(2) = j  
             
                 previous_node => malha(i,j)%list
@@ -4269,21 +4269,23 @@ module fisica
                 end do
 
                 !extremidades leste oeste
-                if (domy(1) /= 1) i = domy(1)
-                if (domy(2) /= mesh(2)+2) i = domy(2)
+
+                if (domy(1) /= 1) i = domy(1)-1
+                if (domy(2) /= mesh(2)+2) i = domy(2)+1
                 if (domx(1) == 1) then 
                     j = 1
                     x = [jcell(mesh(1)+1), 0.0_dp]
-                    cell = [i, mesh(1) + 2]
+                    cell = [i, mesh(1) + 1]
                 end if
                 if (domx(2) == mesh(1) + 2) then 
                     j = domx(2) 
                     x = [-jcell(mesh(1)+1), 0.0_dp]
                     cell = [i, 2]
                 end if
-            
+
                 previous_node => malha(i,j)%list
                 node => list_next(malha(i,j)%list)
+           
                 ! if (associated(node)) ptr = transfer(list_get(node), ptr)
                 ! if (associated(node))  print*, "mudança diagonal", i,j, "ID", id
                 do while(associated(node))
@@ -4294,11 +4296,11 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), &
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    ! print*, "L 2289 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
                     previous_node => node
                     node => list_next(node)
+                    read(*,*)
                 end do
 
                 !extremidades nas pontas
@@ -4335,7 +4337,6 @@ module fisica
                     LT%lstrdb_D(cont_db(destD)+1:cont_db(destD)+6) = [x(1)+ptr%p%x(1),x(2)+ptr%p%x(2), ptr%p%v(1),ptr%p%v(2), & 
                         ptr%p%F(1),ptr%p%F(2)]
                     LT%lstrint_D(cont_int(destD)+1:cont_int(destD)+4) = [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
-                    print*, "L 2333 id",id,"transferindo diagonal",  [cell(1),cell(2),ptr%p%n,ptr%p%grupo]
 
                     cont_db(destD) = cont_db(destD) + 6
                     cont_int(destD) = cont_int(destD) + 4 
