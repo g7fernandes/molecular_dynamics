@@ -6107,6 +6107,7 @@ program main
                         if (id == 1) then
                             tag = 10
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 10
@@ -6119,6 +6120,7 @@ program main
                         if (id == 2) then
                             tag = 20
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if 
                         if (id == 0) then
                             tag = 20
@@ -6130,6 +6132,7 @@ program main
                         if (id == 3) then
                             tag = 30
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 30
@@ -6147,7 +6150,7 @@ program main
                                     [real(mic(ii+1,1),kind(0.d0)),real(mic(ii+1,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
-                            call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
+                            call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)     
                         else 
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
@@ -6195,12 +6198,10 @@ program main
 
             ! COMP X
             call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,cold_cells,hot_cells) ! altera posição
-            !print*, "L 2002", id
-            ! if (id == 0) read(*,*)
-            ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
-            
+     
             ! COMP V
             call comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
 
@@ -6257,8 +6258,7 @@ program main
                     call vec2csv(v,N,2,'velocity',j,t,nimpre,start)
                 
                 end if
-                ! if (id == 0) read(*,*)
-                ! call MPI_barrier(MPI_COMM_WORLD, ierr) 
+
                 
                 deallocate(nxv,nxv_send)
 
@@ -6305,6 +6305,7 @@ program main
                         if (id == 1) then
                             tag = 10
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 10
@@ -6317,6 +6318,7 @@ program main
                         if (id == 2) then
                             tag = 20
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if 
                         if (id == 0) then
                             tag = 20
@@ -6328,6 +6330,7 @@ program main
                         if (id == 3) then
                             tag = 30
                             call MPI_SEND(mic_trf,2*N,MPI_integer,0,tag,MPI_COMM_WORLD,ierr)
+                            mic = 0
                         end if
                         if (id == 0) then
                             tag = 30
@@ -6340,12 +6343,14 @@ program main
 
                     if (id == 0) then
                         if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then
+
+                            
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = &
                                     [real(mic(ii+1,1),kind(0.d0)),real(mic(ii+1,2),kind(0.d0)),nRfu(ii*6+2), & 
                                     nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
                             end do
-                            call vec2csv(rFUp,N,7,'rF_u_P',j,t,nimpre,start)     
+                            call vec2csv(rFUp,N,6,'rF_u_P',j,t,nimpre,start)     
                         else 
                             do ii = 0, N-1
                                 rFUp(int(nRfu(ii*6+1)),:) = [nRfu(ii*6+2),nRfu(ii*6+3),nRfu(ii*6+4),nRfu(ii*6+5),nRfu(ii*6+6)]
@@ -6353,6 +6358,7 @@ program main
                             call vec2csv(rFUp,N,5,'rF_u_P',j,t,nimpre,start)
                         end if
                     end if 
+                    call MPI_barrier(MPI_COMM_WORLD, ierr) 
                     ! deallocate(nRfu,nRfu_send,rFUp)
                 end if 
                 allocate(LT%lstrdb_N(NMPT*6),LT%lstrdb_S(NMPT*6),LT%lstrdb_E(NMPT*6),LT%lstrdb_W(NMPT*6),LT%lstrdb_D(NMPT*6), &
