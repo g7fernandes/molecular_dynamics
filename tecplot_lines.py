@@ -1,7 +1,7 @@
 import numpy as np
 import tecplot as tp
 import pandas as pd
-from tecplot.constant import PlotType, Color, LinePattern, AxisTitleMode
+from tecplot.constant import PlotType, Color,Units, LinePattern, AxisTitleMode
 import sys
 # if '-c' in sys.argv:
 #     tp.session.connect()
@@ -12,8 +12,29 @@ tp.session.connect()
 csv_input = pd.read_csv('Distributions.csv')
 hl = list(csv_input) #headers list
 
+## NOME DAS ZONAS ##
+zonas = \
+[['A','neon_3sep_stat'], \
+['B','carlos_2sep_stat'], \
+['C','neon4sep_stat'], \
+['D','kubuntu_3sep_stat'], \
+['E','kubuntu_5sep_stat'], \
+['F','suse_6sep_stat'], \
+['G','rafa_3sep_stat'], \
+['H','carlos_4sep_stat'], \
+['I','rafa_4sep_stat'], \
+['J','kubuntu_4sep_stat'], \
+['K','rafa_6sep_stat'], \
+['L','suse_3sep_stat'], \
+['M','rafa_5sep_stat'], \
+['N','carlos_3sep_stat'], \
+['O','kubuntu_7_sep_stat'], \
+['P','suse_7sep_STAT'], \
+['Q','rafa_7sep_stat']]
+
+
 for i in range(len(hl)):
-    print("{} | {}\n".format(i,hl[i]))
+    print("{} | {} | {}\n".format(i,[zonas[j][0] for j in range(len(zonas)) if zonas[j][1] == hl[i]][0],hl[i]))
 linhas = input("Entre os numeros dos dados que quer plotar separados por espaço:\n").split()
 linhas = [int(x) for x in linhas]
 
@@ -23,8 +44,8 @@ frame.height = 8
 frame.width = 11
 dataset = frame.create_dataset("Data", ['x', 'y'])
 for dado in linhas:
-    col = hl[dado]
-    x = csv_input[col].to_numpy()
+    col = [zonas[j][0] for j in range(len(zonas)) if zonas[j][1] == hl[dado]][0]
+    x = csv_input[hl[dado]].to_numpy()
     zone = dataset.add_ordered_zone(col, len(x))
     zone.values('x')[:] = np.linspace(0,1,len(x))   
     zone.values('y')[:] = x
