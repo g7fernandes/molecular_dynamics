@@ -65,8 +65,8 @@ while aux:
         x_file = x_file.replace("'","")
         x_file = x_file.replace('"','')
         if os.path.isfile(x_file):
-            q = config['par_'+str(i)]['quantidade'].split()[0]
-            if file_len('x_file') < q:
+            q = int(config['par_'+str(i)]['quantidade'].split()[0])
+            if file_len(x_file) < q:
                 print('Number of particles in file smaller then expected.')
                 os.system('xdg-open settings.ini')
                 break
@@ -82,20 +82,22 @@ while aux:
         v_file = config['par_'+str(i)]['v_file'].split()[0]
         v_file = v_file.replace("'","")
         v_file = v_file.replace('"','')
-        if v_file[0] == '%' or os.path.isfile(x_file):
-            q = config['par_'+str(i)]['quantidade'].split()[0]
-            if file_len('v_file') < q:
-                print('Number of particles in file smaller then expected.')
-                os.system('xdg-open settings.ini')
-                break
+
+        if v_file[0] != '%': 
+            if os.path.isfile(v_file):
+                q = config['par_'+str(i)]['quantidade'].split()[0]
+                if file_len(v_file) < int(q):
+                    print('Number of particles in file smaller then expected.')
+                    os.system('xdg-open settings.ini')
+                    break
+                else:
+                    aux = False
             else:
-                aux = False
-        else:
-            print("Velocity file {} not found.".format(v_file))
-            os.system('xdg-open settings.ini')
-            input("Fix the config file, then enter to continue...")
-            config.read('settings.ini')
-            break
+                print("Velocity file {} not found.".format(v_file))
+                os.system('xdg-open settings.ini')
+                input("Fix the config file, then enter to continue...")
+                config.read('settings.ini')
+                break
         
 
 if sum(quant) != N: 

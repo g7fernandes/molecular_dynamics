@@ -5451,6 +5451,8 @@ program main
     if (wall(1:2) == 'pp' .or. wall(3:4) == 'pp') then 
         allocate(mic(N,2),mic_trf(2*N))
         mic = 0
+    else
+        allocate(mic(1,2),mic_trf(2*1))
     end if
 
     ! allocate(nxv(N*5),nxv_send(N*5))
