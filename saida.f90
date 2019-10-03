@@ -13,7 +13,8 @@ module saida
         integer :: i,step, nimpre, ic1, cpu_countrate, horas, min 
         real(dp) :: sec
         character(*) :: prop
-        character(4) :: extensao = '.csv', passo
+        character(4) :: extensao = '.csv'
+        character(6) :: passo
         real(dp) :: time
         real(dp), save :: timep, etc, dtimepp
         character(LEN=*),parameter :: fmt5 = '(f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16, ", ",f32.16 )'
@@ -99,7 +100,7 @@ module saida
                 time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
                 etc = ((time - start)/real(step,kind(0.d0)) + (time-timep))*0.5*real(nimpre,kind(0.d0)) - (time - start)
                 dtimepp = (time-timep)
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
+                print '("Salvo arquivo ", A, "  t = ", f12.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
             else if (step > 2) then
                 call system_clock(ic1,cpu_countrate)
                 time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
@@ -108,19 +109,19 @@ module saida
                 horas = int(etc/3600)
                 min = (int(etc) - horas*3600)/60 
                 sec = etc - real(horas*3600 + min*60,kind(0.d0))
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", i3,":",i2,":",f4.1 )' &
+                print '("Salvo arquivo ", A, "  t = ", f12.3, "  ETC: ", i3,":",i2,":",f4.1 )' &
                     ,prop//extensao//'.'//trim(passo),t,horas, min, sec                                    
                 dtimepp = (time-timep)  
             else 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
+                print '("Salvo arquivo ", A, "  t = ", f12.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
             end if
 
             timep = time 
         else 
             if (step > 2) then 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
+                print '("Salvo arquivo ", A, "  t = ", f12.3, "  ETC: ", f10.3, "s" )',prop//extensao//'.'//trim(passo),t,etc                                    
             else 
-                print '("Salvo arquivo ", A, "  t = ", f10.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
+                print '("Salvo arquivo ", A, "  t = ", f12.3, "  ETC: ", "unknown" )',prop//extensao//'.'//trim(passo),t
             end if
            ! time = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
            ! timep = time
