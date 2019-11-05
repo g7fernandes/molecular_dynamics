@@ -37,16 +37,17 @@ def density_map(x,dimx,dimy,tam):
 
 tol = 1
 
-ff = 1 # formato da região ff = x/y
-Lx = 100
+ff = 1/8 # formato da região ff*x = y
+Lx = 10000
 arquivo1 = 'molp.csv'
 arquivo2 = 'parp.csv'
 
-N1 = 1000
-N2 = 10
+
+N2 = 100
 
 L1 = Lx
-L2 = Lx/ff
+L2 = Lx*ff
+
 print("Formato da região: {} x {}".format(L1,L2))
 spac = 2**(1/6)
 N1 = int((int((tol*L1-spac)/spac)+ (int((tol*L1-spac)/spac)-2))*int((tol*L2-spac)/(spac**2*(3/4)))/2)
@@ -87,13 +88,19 @@ p1 = np.array(p1)
 r2 = float(input(">> Raio da partícula 2: "))
 
 if N2 > 0:
-    d1 = int(np.sqrt(N2*(L1*tol-2*r2)/(L2*tol-2*r2)))
-    d2 = int(N2/d1)
-    sx = (L1*tol-2*r2)/d1
-    sy = (L2*tol-2*r2)/d2
+    N2obj = N2
+    N2 = N2 - 1 
+    i = 0
+    while N2 < N2obj:
+        N2 = N2obj + i 
+        i = i + 1
+        d1 = int(np.sqrt(N2*(L1*tol-2*r2)/(L2*tol-2*r2)))
+        d2 = int(N2/d1)
+        sx = (L1*tol-2*r2)/d1
+        sy = (L2*tol-2*r2)/d2
+        N2 = d1*d2
 
-    N2 = d1*d2
-    # Posição das partículas
+        # Posição das partículas
     p2 = np.zeros([N2,2])
 
     #posição de referência
@@ -133,6 +140,11 @@ ax = fig.add_subplot(111)
 
 np.random.shuffle(p1)        
 
+aux = input("Numero maximo de partículas N1 (max atual: {}): ".format(N1))
+if aux != '':
+    p1 = p1[0:N1,:]
+    N1 = len(p1)
+
 with open(arquivo1,'w') as file:
     for i in range(len(p1)):
         file.write('{},{}\n'.format(p1[i,0],p1[i,1]))
@@ -140,7 +152,12 @@ with open(arquivo1,'w') as file:
 ax.scatter(p1[:,0],p1[:,1], s=(np.pi*1**2),label='arquivo1')
 
 if N2 > 0:
-    np.random.shuffle(p2)        
+    np.random.shuffle(p2)     
+
+    aux = input("Numero maximo de partículas N2 (max atual: {}): ".format(N2))
+    if aux != '':
+        p2 = p1[0:N2,:]
+        N2 = len(p2)   
 
     with open(arquivo2,'w') as file:
         for i in range(len(p2)):
@@ -154,6 +171,7 @@ if N2 > 0:
 else:
     print('N1 = {}\n'.format(len(p1)))
     print("Arquivos {} e {}\n".format(arquivo1,arquivo2)) 
+
 
 ax.set_aspect(aspect=1)
 ax.legend()

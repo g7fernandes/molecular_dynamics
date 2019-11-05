@@ -1,5 +1,5 @@
 #!/bin/bash
-read -e -p "Enter particle generator file: " VAR1
+read -e -p "Enter particle generator file or position files: " VAR1
 
 if [ "$VAR1" = "" ]; then
     echo "No particle generator given."
