@@ -1737,17 +1737,21 @@ module fisica
                     end if 
                     ptr%p%flag = .false.
                     if ((dx(1)**2 + dx(2)**2) >= dx_max) then
+                        print*, "t =", t, "step = ", t/dt
                         print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
                         print*, "F",ptr%p%F, "v", ptr%p%v
                         print*, "x", ptr%p%x(1), ptr%p%x(2)
+                        call system('killall lennard')
                         call system('killall lennard.out')
                         dx = [dx(1)/dx(1),dx(1)/dx(1)]*dx_max
                         read(*,*)
                     end if
                     if (isnan(dx(1)) .or. isnan(dx(2))) then
+                        print*, "t =", t, "step = ", t/dt
                         print '("NaN NaN Nan Batman! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
                         print*, "F",ptr%p%F, "v", ptr%p%v
                         print*, "x", ptr%p%x(1), ptr%p%x(2)
+                        call system('killall lennard')
                         call system('killall lennard.out')
                     end if
 
@@ -2793,17 +2797,21 @@ module fisica
                     end if 
                     ptr%p%flag = .false.
                     if ((dx(1)**2 + dx(2)**2) >= dx_max) then
+                        print*, "t =", t, "step = ", t/dt
                         print '("Particulas rápidas demais! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
                         print*, "F",ptr%p%F, "v", ptr%p%v
                         print*, "x", ptr%p%x(1), ptr%p%x(2)
+                        call system('killall lennard')
                         call system('killall lennard.out')
                         dx = [dx(1)/dx(1),dx(1)/dx(1)]*dx_max
                         read(*,*)
                     end if
                     if (isnan(dx(1)) .or. isnan(dx(2))) then
+                        print*, "t =", t, "step = ", t/dt
                         print '("NaN NaN Nan Batman! dx =", f18.5, " ", f18.5, " | n ", i4)', dx(1), dx(2), ptr%p%n 
                         print*, "F",ptr%p%F, "v", ptr%p%v
                         print*, "x", ptr%p%x(1), ptr%p%x(2)
+                        call system('killall lennard')
                         call system('killall lennard.out')
                     end if
                     
@@ -5233,12 +5241,25 @@ module fisica
         type(data_ptr) :: ptr
         logical, intent(in) :: tudo 
         ! print*, "AAA", id
-        if (tudo) k = 1
-        do i = 2-k,mesh(1)+1+k
-            do j = 2-k, mesh(2)+1+k
+        if (tudo) then 
+            k = 1
+        else 
+            k = 0
+        end if
+        ! print*, "id", id,"|", domx, "|", domy
+
+        ! if (id == 0) then
+        !     ! print*, t
+        !     read(*,*)
+        ! end if 
+        ! call MPI_barrier(MPI_COMM_WORLD, ierr)
+
+        do i = 2-k,mesh(2)+1+k
+            do j = 2-k, mesh(1)+1+k
                 if (((i < domy(1)-1 .or. i > domy(2)+1) .and. (j < domx(1)-1 .or. j > domx(2)+1)) .or. tudo) then 
-                    node => list_next(malha(i,j)%list)
+                    
                     ! print*, "i,j,id", i,j, id
+                    node => list_next(malha(i,j)%list)
                     do while (associated(node)) 
                         ptr = transfer(list_get(node), ptr)
                         deallocate(ptr%p)
@@ -5863,49 +5884,57 @@ program main
         partlst = 0
         omega = 0
 
-        if (Td > 0) then 
-            print*, "Global temperature specified. Td = ", Td 
-        else if (Td_cold > 0) then
-            print*, "Regional temperatures specified:", Td_cold, Td_hot
-        else
-            print*, "No temperature specified!"
+        if (id == 0) then 
+            if (Td > 0) then 
+                print*, "Global temperature specified. Td = ", Td 
+                if (.not. termostato_vel_scaling) print*, "But ignored since the thermostat is off"
+            else if (Td_cold > 0) then
+                print*, "Regional temperatures specified:", Td_cold, Td_hot
+                if (.not. termostato_vel_scaling) print*, "But ignored since the thermostat is off"
+            else
+                print*, "No temperature specified!"
+            end if
         end if
         ! Calcula a rotação da partícula. Velocity scaling.
         do while (t_fim > t)
             ! COMPF
+            ! print*, "L 6544", id
+            partlst = 0
+            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t,dt,partlst)  !altera Força
+            ! print*, id, "| tor", tor
+            ! print*, id, "| omega",omega
+            ! print*, id, "| theta",theta
             ! if (id == 0) then
             !     ! print*, t
             !     read(*,*)
+            !     ! if (theta(1) /= 1) read(*,*)
             ! end if 
             call MPI_barrier(MPI_COMM_WORLD, ierr)
-            ! print*, "L 6544", id
-            call comp_FT(GField,hfield,theta,Tor,pr, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t,dt,partlst)  !altera Força
-            ! print*, "tor", tor
-            ! print*, "omega",omega
-            ! print*, "theta",theta
             ! read(*,*)
             ! IDS são os ids das regiões vizinhas, vetor(4) int posições, 
             ! DOMX e DOMY são vetores(2) int com o domínio (quat. de celulas)
             ! que o processo vai cuidar (subdivisões)
             ! print*, "L 6408", id
             if (propriedade(gruporot)%x_lockdelay > t) omega = 0
-            theta = theta*partlst
-            omega = omega*partlst
 
             ! COMP X
             call comp_xT(icell,jcell,malha,N,mesh,propriedade,Tor,theta,omega, dx_max,t,dt,ids,LT,domx,domy,wall,mic,id, np) ! altera posição
+            
+            ! print*, id, "id partlst", partlst
+            theta = theta*partlst
+            omega = omega*partlst
             ! print*, "L 6460", id
             ! print*, "tor", tor
             ! print*, "omega",omega
             ! print*, "theta",theta
             ! read(*,*)
 
-            do ii = 1,num_rot
-                if ( partlst(ii) < 1) then ! particula não está no domínio
-                    theta(ii) = 0
-                    omega(ii) = 0
-                end if
-            end do
+            ! do ii = 1,num_rot
+            !     if ( partlst(ii) < 1) then ! particula não está no domínio
+            !         theta(ii) = 0
+            !         omega(ii) = 0
+            !     end if
+            ! end do
             ! compartilha valores de theta, torque e omega (pos, torque, vel angular)
             ! num_rot, numero de partícuals que giram
             ! print*, "L 6574"
@@ -5916,9 +5945,11 @@ program main
                     ! aux5(1:num_rot) = theta ! vetor auxiliar pra o mpi, theta 
                     ! aux5(num_rot+1:2*num_rot) = omega ! " " ", omega
                     ! aux5(2*num_rot+1:3*num_rot) = Tor ! " " ", Tor
+                    ! print*, "id", id, "aux5", aux5
                     tag = id 
                     call MPI_SEND(aux5, 3*num_rot, MPI_DOUBLE_PRECISION, 0, tag, MPI_COMM_WORLD, ierr) 
                 else ! processo raiz
+                    ! print*, "id = 0 theta", theta
                     ! recebe dos processos servos. Aqui vamos somar. Garantiremos que os valores de theta e omega
                     ! nos processos onde a partícula não está sejam = 0 
                     call MPI_RECV(aux5, 3*num_rot, MPI_DOUBLE_PRECISION, 1, 1, MPI_COMM_WORLD, status, ierr)
