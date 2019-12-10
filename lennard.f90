@@ -635,7 +635,7 @@ module fisica
    
     end function comp_K 
 
-    subroutine corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
+    subroutine corr_K(malha,domx,domy,ccells,hcells,Td_hot,Td_cold,propriedade, np,id,t)
         use linkedlist
         use mod1
         use data
@@ -645,7 +645,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         real(dp),intent(in) :: Td_hot, Td_cold !energia cinética
         real(dp) :: T_hot, T_cold,K,kb = 1.38064852E-23, betac, betah
-        integer, intent(in) :: domx(2),domy(2), cold_cells(4), hot_cells(4)
+        integer, intent(in) :: domx(2),domy(2), ccells(4), hcells(4)
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         type(data_ptr) :: ptr
         type(list_t), pointer :: node
@@ -654,14 +654,14 @@ module fisica
         
         !calcula temperatura atual
         ! T = (2/(Nf*kb))*Ekin com Nf = número de graus de liberadade 
-        T_hot =  comp_K(malha,domx,domy,hot_cells,propriedade,np,id,t)
-        T_cold = comp_K(malha,domx,domy,cold_cells,propriedade,np,id,t)
+        T_hot =  comp_K(malha,domx,domy,hcells,propriedade,np,id,t)
+        T_cold = comp_K(malha,domx,domy,ccells,propriedade,np,id,t)
 
         betac = sqrt(Td_cold/T_cold) 
         betah = sqrt(Td_hot/T_hot)
         do i = domy(1),domy(2)
             do j = domx(1),domx(2)
-                if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                if (j >= ccells(1) .and. j <= ccells(2) .and. i >= ccells(3) .and. i <= ccells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -671,7 +671,7 @@ module fisica
                         end if
                         node => list_next(node)
                     end do
-                else if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                else if (j >= hcells(1) .and. j <= hcells(2) .and. i >= hcells(3) .and. i <= hcells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -2584,7 +2584,7 @@ module fisica
         real(dp), intent(in), dimension(:) :: Tor, omega
         character(4), intent(in) :: wall
         type(data_ptr) :: ptr
-        logical :: auxl ! variavel auxiliar lógica
+        logical :: auxl, laux ! variavel auxiliar lógica
         real(dp) :: x(2),m, dx(2),rs
         real(dp), save :: MI !Mi momento de inercia (1/2)m*r^2 para discos
         real(dp), intent(in) :: icell(:), jcell(:)
@@ -3581,7 +3581,7 @@ module fisica
     end subroutine comp_xT
 
     ! atualiza posições
-    subroutine comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,cold_cells,hot_cells)
+    subroutine comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,ccells,hcells)
         use linkedlist
         use mod1
         use data
@@ -3594,7 +3594,7 @@ module fisica
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         ! integer, intent(inout) :: mic(:)
         integer :: i,j,k, cell(2), status(MPI_STATUS_SIZE), count, destD,dx1,dx2,dy1,dy2
-        integer, intent(in) :: N,mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4)
+        integer, intent(in) :: N,mesh(2),domx(2),domy(2), ccells(4), hcells(4)
         integer, intent(inout) :: mic(:,:)
         type(list_t), pointer :: node, previous_node
         real(dp), intent(in) :: dt, t, xih, xic
@@ -3779,7 +3779,7 @@ module fisica
                     if (propriedade(ptr%p%grupo)%x_lockdelay > t) ptr%p%flag = .false. 
                      
                     ! Termostato quente
-                    if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                    if (j >= hcells(1) .and. j <= hcells(2) .and. i >= hcells(3) .and. i <= hcells(4)) then
                         if (ptr%p%flag) then 
                             dx(1) = dt*ptr%p%v(1)*(1-dt*xih/2) + ptr%p%F(1)*dt**2/(2*m)
                             dx(2) = dt*ptr%p%v(2)*(1-dt*xih/2) + ptr%p%F(2)*dt**2/(2*m) 
@@ -3788,7 +3788,7 @@ module fisica
                             dx = [0,0]
                         end if 
                     !Termostato frio
-                    else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                    else if (j >= ccells(1) .and. j <= ccells(2) .and. i >= ccells(3) .and. i <= ccells(4)) then
                         if (ptr%p%flag) then 
                             dx(1) = dt*ptr%p%v(1)*(1-dt*xic/2) + ptr%p%F(1)*dt**2/(2*m)
                             dx(2) = dt*ptr%p%v(2)*(1-dt*xic/2) + ptr%p%F(2)*dt**2/(2*m)
@@ -4671,7 +4671,7 @@ module fisica
         end do
     end subroutine comp_vT
 
-    subroutine comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy,Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
+    subroutine comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy,Mc, xih, xic, Td_hot, Td_cold, hcells, ccells)
         use linkedlist
         use mod1
         use data
@@ -4681,7 +4681,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j, bsh(4)
-        integer, intent(in) :: mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4), np
+        integer, intent(in) :: mesh(2),domx(2),domy(2), ccells(4), hcells(4), np
         type(list_t), pointer :: node 
         real(dp), intent(in) :: dt, t, Mc, Td_hot, Td_cold
         type(data_ptr) :: ptr
@@ -4702,7 +4702,7 @@ module fisica
 
         do i = (domy(1)+bsh(3)), (domy(2)+bsh(4))
             do j = (domx(1)+bsh(1)), (domx(2)+bsh(2))
-                if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                if (j >= hcells(1) .and. j <= hcells(2) .and. i >= hcells(3) .and. i <= hcells(4)) then
                     ! Termostato afeta QUENTE
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
@@ -4726,7 +4726,7 @@ module fisica
                     end do
 
                  ! Termostato afeta FRIO
-                else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                else if (j >= ccells(1) .and. j <= ccells(2) .and. i >= ccells(3) .and. i <= ccells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -4783,7 +4783,7 @@ module fisica
         ! molecular simulation pag. 52, 101 do pdf
     end subroutine comp_v_thermo_pred
 
-    subroutine comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells)
+    subroutine comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hcells, ccells)
         use linkedlist
         use mod1
         use data
@@ -4792,7 +4792,7 @@ module fisica
         type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
         type(container), allocatable,dimension(:,:),intent(in) :: malha
         integer :: i,j, bsh(4)
-        integer, intent(in) :: mesh(2),domx(2),domy(2), cold_cells(4), hot_cells(4) !,id 
+        integer, intent(in) :: mesh(2),domx(2),domy(2), ccells(4), hcells(4) !,id 
         type(list_t), pointer :: node 
         real(dp), intent(in) :: dt, t
         type(data_ptr) :: ptr
@@ -4808,7 +4808,7 @@ module fisica
 
         do i = (domy(1)+bsh(3)), (domy(2)+bsh(4))
             do j = (domx(1)+bsh(1)), (domx(2)+bsh(2))
-                if (j >= hot_cells(1) .and. j <= hot_cells(2) .and. i >= hot_cells(3) .and. i <= hot_cells(4)) then
+                if (j >= hcells(1) .and. j <= hcells(2) .and. i >= hcells(3) .and. i <= hcells(4)) then
                     ! Termostato afeta QUENTE
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
@@ -4829,7 +4829,7 @@ module fisica
                     end do
 
                  ! Termostato afeta FRIO
-                else if (j >= cold_cells(1) .and. j <= cold_cells(2) .and. i >= cold_cells(3) .and. i <= cold_cells(4)) then
+                else if (j >= ccells(1) .and. j <= ccells(2) .and. i >= ccells(3) .and. i <= ccells(4)) then
                     node => list_next(malha(i,j)%list)
                     do while (associated(node))
                         ptr = transfer(list_get(node), ptr)
@@ -5312,7 +5312,7 @@ program main
     real(dp),parameter :: PI = 3.1415927, kb = 1.38064852E-23
 !    Variáveis
     integer :: N,Ntype,i=1, nimpre,j = 1, ii, quant = 0,mesh(2), cont = 1, aux1 = 0,cont2 = 1,domx(2), domy(2), aux3, num_rot, pa
-    integer :: subx, suby, NMPT, j2, cold_cells(4), hot_cells(4), nimpre_init, cpu_countrate,ic1, force_lingradT, aux4, domx_aux(2)
+    integer :: subx, suby, NMPT, j2, ccells(4), hcells(4), nimpre_init, cpu_countrate,ic1, force_lingradT, aux4, domx_aux(2)
     integer, target :: k
     real(dp), dimension(:,:), allocatable :: v, x, celula, rFUp !força n e n+1, velocidades e posições, [r*F, potencial e momento]
     real(dp), dimension(:), allocatable :: aux5,omega,theta,Tor,icell,jcell, nxv, nxv_send, nRfu, nRfu_send !dimensões das celulas e vetor de resultado pra imprimir
@@ -5439,8 +5439,8 @@ program main
     call CFG_get(my_cfg,"global%Mc", Mc)
     call CFG_get(my_cfg,"global%Td",Td)
     call CFG_get(my_cfg,"global%temp_Td",temp_Td)
-    call CFG_get(my_cfg,"global%cold_cells",cold_cells)
-    call CFG_get(my_cfg,"global%hot_cells",hot_cells)
+    call CFG_get(my_cfg,"global%cold_cells",ccells)
+    call CFG_get(my_cfg,"global%hot_cells",hcells)
     call CFG_get(my_cfg,"global%Td_cold",Td_cold)
     call CFG_get(my_cfg,"global%Td_hot",Td_hot)
     call CFG_get(my_cfg,"global%force_lingradT",force_lingradT)
@@ -5644,8 +5644,8 @@ program main
         call MaxwellBoltzmann(malha,mesh,vd,propriedade)
     end if 
     ! adicionamos uma celula para corrigir o fato de estarmos usando fantasmas
-    cold_cells = cold_cells + 1
-    hot_cells = hot_cells + 1
+    ccells = ccells + 1
+    hcells = hcells + 1
     !-------------------------------------------------!
     ! ITERAÇÕES
     
@@ -6037,7 +6037,7 @@ program main
                     if (Td > 0) then
                         call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
                     else if (Td_cold > 0) then
-                        call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
+                        call corr_K(malha,domx,domy,ccells,hcells,Td_hot,Td_cold,propriedade, np,id,t)
                     end if
                     ! j2 = j2 + 1
                 end if 
@@ -6214,8 +6214,8 @@ program main
             end if
         end if
         if (Td > 0) then 
-            hot_cells =  [mesh(1)/2 +1 , mesh(2), 1, mesh(2)]
-            cold_cells = [1, mesh(1)/2, 1, mesh(2)]
+            hcells =  [mesh(1)/2 +1 , mesh(2), 1, mesh(2)]
+            ccells = [1, mesh(1)/2, 1, mesh(2)]
             Td_cold = Td 
             Td_hot = Td
         end if
@@ -6230,19 +6230,19 @@ program main
             ! que o processo vai cuidar (subdivisões)
 
             ! COMP X
-            call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,cold_cells,hot_cells) ! altera posição
+            call comp_x_thermo(icell,jcell,malha,N,mesh,propriedade,t,dt,ids,LT,domx,domy,wall,mic,id,np,xih,xic,ccells,hcells) ! altera posição
 
             
             call walls(icell,jcell,mesh,malha,domx,domy,wall,subx,suby,np,id,mic) ! altera posição e malha
      
             ! COMP V
-            call comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hot_cells, cold_cells)
+            call comp_v_thermo_pred(malha,mesh,dt,t,np,propriedade,domx,domy, Mc, xih, xic, Td_hot, Td_cold, hcells, ccells)
 
             ! COMP F 
             call comp_F_thermo(GField, mesh,malha,propriedade,rcut,domx,domy,ids,id,wall,t) !altera força
 
             ! COMP V
-            call comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hot_cells, cold_cells)
+            call comp_v_thermo_corr(malha,mesh,dt,t,propriedade,domx,domy, xih, xic, hcells, ccells)
 
             t = t + dt
             cont2 = cont2+1
@@ -6469,7 +6469,7 @@ program main
                     if (Td > 0) then
                         call corr_Kglobal(malha,domx,domy,Td,propriedade, np,id,t)
                     else if (Td_cold > 0) then
-                        call corr_K(malha,domx,domy,cold_cells,hot_cells,Td_hot,Td_cold,propriedade, np,id,t)
+                        call corr_K(malha,domx,domy,ccells,hcells,Td_hot,Td_cold,propriedade, np,id,t)
                     end if
                     ! j2 = j2 + 1
                 end if 

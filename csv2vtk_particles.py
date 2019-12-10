@@ -8,8 +8,13 @@ linha é uma partícula e exporta em vtk o reultado.
 
 @author: gabriel
 """
-
-from evtk.hl import pointsToVTK
+try:
+    from evtk.hl import pointsToVTK
+except:
+    try: 
+        from pyevtk.hl import pointsToVTK
+    except:
+        print("You need to install the pyevtk package for python!")
 import numpy as np
 import csv, os, shutil
 import configparser

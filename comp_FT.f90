@@ -760,7 +760,10 @@ subroutine comp_FT(GField,Hfield,theta,Tor,pr,mesh,malha,propriedade,r_cut,domx,
                                         [(x1(1)-x2(1)) - (rs1+rs2)*coss, (x1(2)-x2(2)) - (rs1+rs2)*sine]/r  
 
                                     aux3 =  (1/(B * sin(beta * gamma) + r)) * (epsil * (A * sin(alpha * gamma) + 1)* &
-                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - sigma**6/(B * sin(beta * gamma) + r)**6))
+                                        ((6 * beta * B * sigma**6 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**7 &
+                                        - (12 * beta * B * sigma**12 * cos(beta * gamma))/(B * sin(beta * gamma) + r)**13) + &
+                                        alpha * A * epsil * cos(alpha * gamma) * (sigma**12/(B * sin(beta * gamma) + r)**12 - & 
+                                        sigma**6/(B * sin(beta * gamma) + r)**6))
     
                                     fric_term = (fric_term1+fric_term2)/2
                                     if (fric_term > 0) then
