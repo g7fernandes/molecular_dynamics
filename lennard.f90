@@ -5292,7 +5292,252 @@ module fisica
 
 end module fisica
 
+module check
+    contains
+    
+    function check_positions(mesh,malha,propriedade,domx,domy,ids) result(found_problem)
+        use linkedlist
+        use mod1
+        use data
+        use mod0
+        use mpi
 
+        type(prop_grupo), allocatable,dimension(:),intent(in) :: propriedade
+        type(container), allocatable,dimension(:,:),intent(in) :: malha
+        integer, intent(in) :: mesh(:),domx(2),domy(2)
+        integer :: i,j,ct = 0, dox(2), doy(2) !,ptr, ptrn
+        real(dp) :: x1(2),x2(2), rs1, rs2, r 
+        type(list_t), pointer :: node, next_node
+        type(data_ptr) :: ptr,ptrn
+        logical :: found_problem
+        integer ( kind = 4 ), intent(in) :: ids(8)
+
+        found_problem = .false. 
+        dox = domx 
+        doy = domy 
+
+        if (sum(ids(1:4)) > -4) then
+            !caso paralelo
+            if (domx(1) > 1) dox(1) = domx(1) - 1
+            if (domy(1) > 1) doy(1) = domy(1) - 1
+            if (domx(2) < mesh(1)+2) dox(2) = domx(2) + 1
+            if (domy(2) < mesh(2)+2) doy(2) = domy(2) + 1
+        else
+            dox = domx 
+            doy = domy 
+        end if 
+
+        do i = doy(1),doy(2) ! i é linha
+            do j = dox(1),dox(2)
+                node => list_next(malha(i,j)%list)
+
+                do while (associated(node))
+                    ptr = transfer(list_get(node), ptr) !particula selecionada
+                    ptr%p%flag = .true. ! indica ao comp_x que a partícula precisa ser calculada
+                    x1 = ptr%p%x
+                    sigma_a = propriedade(ptr%p%grupo)%sigma
+                    rs1 = propriedade(ptr%p%grupo)%rs !raio sólido 
+
+                    next_node => list_next(node) ! próxima partícula da célula
+                    node => list_next(node) ! a ser computado com a particula selecionada
+                    
+                    do while (associated(node))
+                        ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                        sigma_b = propriedade(ptrn%p%grupo)%sigma
+                        rs2 = propriedade(ptrn%p%grupo)%rs 
+
+                        x2 = ptrn%p%x
+
+                        r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                        r = r - rs1 - rs2 !raio
+
+                        if (r < 0.25*(sigma_a + sigma_b)) then 
+                            if (.not. found_problem) then 
+                                print*, "A The following particles may be too near to each other"
+                                found_problem = .true.
+                            end if 
+                        
+                            print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                            print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                        end if
+                        node => list_next(node) ! próxima partícula da célula 
+                    end do
+
+                    if (i /= mesh(2)+2) then ! se não for a última linha
+                        if (j == mesh(1)+2) then ! se for a última coluna
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha apenas
+                            do while (associated(node))
+
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+        
+                                x2 = ptrn%p%x
+
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                r = r - rs1 - rs2 !raio
+        
+                                if (r < 0.25*(sigma_a + sigma_b)) then 
+                                    if (.not. found_problem) then 
+                                        print*, "B The following particles may be too near to each other"
+                                        found_problem = .true.
+                                    end if 
+                                
+                                    print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                    print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                   
+                                end if
+                                node => list_next(node) ! próxima partícula da célula 
+                            end do
+
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
+            
+                                    x2 = ptrn%p%x
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                    r = r - rs1 - rs2 !raio
+            
+                                    if (r < 0.25*(sigma_a + sigma_b)) then 
+                                        if (.not. found_problem) then 
+                                            print*, "C The following particles may be too near to each other"
+                                            found_problem = .true.
+                                        end if 
+                                    
+                                        print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                        print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula 
+                                end do 
+                            end if 
+                        else 
+                            node => list_next(malha(i,j+1)%list) 
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+        
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                r = r - rs1 - rs2 !raio
+        
+                                if (r < 0.25*(sigma_a + sigma_b)) then 
+                                    if (.not. found_problem) then 
+                                        print*, "D The following particles may be too near to each other"
+                                        found_problem = .true.
+                                    end if 
+                                
+                                    print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                    print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                end if
+                                node => list_next(node) ! próxima partícula da célula 
+                            end do 
+
+                            node => list_next(malha(i+1,j)%list) !interagirá com a próxima linha 
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+        
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                r = r - rs1 - rs2 !raio
+        
+                                if (r < 0.25*(sigma_a + sigma_b)) then 
+                                    if (.not. found_problem) then 
+                                        print*, "E The following particles may be too near to each other"
+                                        found_problem = .true.
+                                    end if 
+                                
+                                    print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                    print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                end if
+                                node => list_next(node) ! próxima partícula da célula 
+                            end do 
+
+                            node => list_next(malha(i+1,j+1)%list) !interagirá com a próxima linha e coluna
+                            do while (associated(node))
+                                ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                rs2 = propriedade(ptrn%p%grupo)%rs 
+        
+                                x2 = ptrn%p%x
+                                r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                r = r - rs1 - rs2 !raio
+        
+                                if (r < 0.25*(sigma_a + sigma_b)) then 
+                                    if (.not. found_problem) then 
+                                        print*, "F The following particles may be too near to each other"
+                                        found_problem = .true.
+                                    end if 
+                                
+                                    print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                    print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                end if
+                                node => list_next(node) ! próxima partícula da célula 
+                            end do 
+
+                            if (j /= 1) then !se não for a primeira coluna 
+                                node => list_next(malha(i+1,j-1)%list) !interagirá com a próxima linha apenas
+                                do while (associated(node))
+                                    ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                                    sigma_b = propriedade(ptrn%p%grupo)%sigma
+                                    rs2 = propriedade(ptrn%p%grupo)%rs 
+            
+                                    x2 = ptrn%p%x
+                                    r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                                    r = r - rs1 - rs2 !raio
+            
+                                    if (r < 0.25*(sigma_a + sigma_b)) then 
+                                        if (.not. found_problem) then 
+                                            print*, "G The following particles may be too near to each other"
+                                            found_problem = .true.
+                                        end if 
+                                    
+                                        print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                        print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                                    end if
+                                    node => list_next(node) ! próxima partícula da célula 
+                                end do 
+                            end if                    
+                        end if
+
+                    else if (j /= mesh(1) + 2) then ! se for a última lina, só interage com a celua ao lado 
+                        node => list_next(malha(i,j+1)%list) !interagirá com a próxima linha e coluna
+                        do while (associated(node))
+                            ptrn = transfer(list_get(node), ptrn) !outra particula selecionada
+                            sigma_b = propriedade(ptrn%p%grupo)%sigma
+                            rs2 = propriedade(ptrn%p%grupo)%rs 
+    
+                            x2 = ptrn%p%x
+                            r = sqrt((x1(1)-x2(1))**2 + (x1(2)-x2(2))**2)                   
+                            r = r - rs1 - rs2 !raio
+    
+                            if (r < 0.25*(sigma_a + sigma_b)) then 
+                                if (.not. found_problem) then 
+                                    print*, "H The following particles may be too near to each other"
+                                    found_problem = .true.
+                                end if 
+                            
+                                print*, "Particles ", ptr%p%n, "and", ptrn%p%n
+                                print*, "    at ", ptr%p%x, "and", ptrn%p%x
+                            end if
+                            node => list_next(node) ! próxima partícula da célula 
+                        end do 
+                    end if
+                    node => next_node
+                end do
+            end do
+        end do 
+        
+
+    end function check_positions
+
+
+end module 
 program main
     use mod1
     use linkedlist
@@ -5304,6 +5549,7 @@ program main
     use fisica
     use randnormal
     use mpi
+    use check
     use, intrinsic :: ieee_arithmetic, only: IEEE_Value, IEEE_QUIET_NAN
     use, intrinsic :: iso_fortran_env, only: real32
 
@@ -5803,6 +6049,17 @@ program main
         ! read(*,*)
     end if
 
+    print*, 'Checking positions of particles...'
+    
+    do i = 0, np
+        if (id == i) then 
+            if (check_positions(mesh,malha,propriedade,domx,domy,ids)) then
+                print*, "Bad positioning found. Continue anyway? Ctrl + c to cancel"
+                read(*,*)
+            end if 
+        end if 
+        call MPI_barrier(MPI_COMM_WORLD, ierr)
+    end do 
     if (id == 0) then 
         call system_clock(ic1,cpu_countrate)
         start = real(ic1,kind(0.d0))/real(cpu_countrate,kind(0.d0))
