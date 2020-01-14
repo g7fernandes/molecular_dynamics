@@ -158,5 +158,4 @@ contains
 !     logical :: a
 !     if 
     
-    
 end module linkedlist

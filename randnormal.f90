@@ -12,7 +12,7 @@ module randnormal
         
         if (.not. iset) then
             do while (r >= 1)
-            ! gerar números aleatórios entre -1 e 1
+            ! Generate random numbers between -1 e 1
                 call random_seed()
                 call random_number(a1)
                 call random_number(a2)
@@ -20,7 +20,7 @@ module randnormal
                 a2 = 2*a2-1
                 r = a1**2 + a2**2
             end do
-            s = sqrt(-2*log(r)/r) !transformação polar
+            s = sqrt(-2*log(r)/r) ! polar transformation
             b1 = a1*s
             b2 = a2*s
             iset = .true.
