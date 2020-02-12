@@ -9,17 +9,17 @@ The Fortran code can be compiled using mpiifort (Intel Fortran Compiler) or mpif
 
 ## Requirements
 GNU Fortran 
-'''
+```
 sudo apt-get install gfortran # Ubuntu Based distros
 sudo zypper in gcc-fortran # OpenSUSE
-'''
+```
 Or [Intel Fortran Compiler](https://software.intel.com/en-us/fortran-compilers)
 
 If using GNU Fortran, install also the OpenMPI package
-'''
+```
 sudo apt-get install --reinstall openmpi-bin libopenmpi-dev # Ubuntu 
 sudo zypper in openmpi openmpi-devel # OpenSUSE
-'''
+```
 For the Python code it is necessary the pyevtk package to convert the csv files to vtk. 
 The package progressbar2 is optional. 
 
