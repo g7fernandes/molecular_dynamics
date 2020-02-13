@@ -6,6 +6,7 @@ The development of this code was part of a graduante reseach project of the auth
 ## Compilation
 
 The Fortran code can be compiled using mpiifort (Intel Fortran Compiler) or mpifort (GCC Fortran). You may change the make file to choose the compiler that you wish. 
+The main file is "lennard.f90" 
 
 ## Requirements
 GNU Fortran 
